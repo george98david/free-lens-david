@@ -47,7 +47,51 @@ def run_kubectl(cmd: str) -> None:
 # Acciones
 # -----------------------------
 def list_pods() -> None:
-    run_kubectl("get pods -o wide")
+    search_text = entry_pod.get().strip().lower()
+    namespace = namespace_var.get().strip()
+
+    try:
+        cmd = ["kubectl", "get", "pods", "-o", "wide"]
+        if namespace:
+            cmd += ["-n", namespace]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        output_box.delete("1.0", tk.END)
+
+        if result.returncode != 0:
+            output_box.insert(tk.END, result.stderr)
+            return
+
+        lines = result.stdout.splitlines()
+
+        if not lines:
+            output_box.insert(tk.END, "No hay pods.\n")
+            return
+
+        # encabezado
+        output_box.insert(tk.END, lines[0] + "\n")
+
+        # filtrar si hay texto
+        if search_text:
+            filtered = [line for line in lines[1:] if search_text in line.lower()]
+        else:
+            filtered = lines[1:]
+
+        if not filtered:
+            output_box.insert(tk.END, f"\nNo hay pods que coincidan con '{search_text}'\n")
+            return
+
+        for line in filtered:
+            output_box.insert(tk.END, line + "\n")
+
+    except Exception as e:
+        output_box.insert(tk.END, f"\nError: {e}\n")
 
 
 def list_deployments() -> None:
