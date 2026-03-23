@@ -55,19 +55,65 @@ def list_deployments() -> None:
 
 
 def pod_logs() -> None:
-    pod = entry_pod.get().strip()
-    if not pod or pod == "nombre-del-pod":
-        output_box.insert(tk.END, "\nDebes ingresar el nombre del pod.\n")
+    search_text = entry_pod.get().strip()
+
+    if not search_text or search_text == "nombre-del-pod":
+        output_box.insert(tk.END, "\nDebes ingresar parte del nombre del pod.\n")
         return
-    run_kubectl(f"logs {pod}")
+
+    try:
+        matches = find_matching_pods(search_text)
+
+        if not matches:
+            output_box.delete("1.0", tk.END)
+            output_box.insert(tk.END, f"No se encontraron pods que coincidan con: {search_text}\n")
+            return
+
+        if len(matches) > 1:
+            output_box.delete("1.0", tk.END)
+            output_box.insert(tk.END, f"Se encontraron varios pods para '{search_text}':\n\n")
+            for pod in matches:
+                output_box.insert(tk.END, f"- {pod}\n")
+            output_box.insert(tk.END, "\nEscribe algo más específico.\n")
+            return
+
+        pod = matches[0]
+        run_kubectl(f"logs {pod}")
+
+    except Exception as e:
+        output_box.delete("1.0", tk.END)
+        output_box.insert(tk.END, f"Error: {e}\n")
 
 
 def pod_describe() -> None:
-    pod = entry_pod.get().strip()
-    if not pod or pod == "nombre-del-pod":
-        output_box.insert(tk.END, "\nDebes ingresar el nombre del pod.\n")
+    search_text = entry_pod.get().strip()
+
+    if not search_text or search_text == "nombre-del-pod":
+        output_box.insert(tk.END, "\nDebes ingresar parte del nombre del pod.\n")
         return
-    run_kubectl(f"describe pod {pod}")
+
+    try:
+        matches = find_matching_pods(search_text)
+
+        if not matches:
+            output_box.delete("1.0", tk.END)
+            output_box.insert(tk.END, f"No se encontraron pods que coincidan con: {search_text}\n")
+            return
+
+        if len(matches) > 1:
+            output_box.delete("1.0", tk.END)
+            output_box.insert(tk.END, f"Se encontraron varios pods para '{search_text}':\n\n")
+            for pod in matches:
+                output_box.insert(tk.END, f"- {pod}\n")
+            output_box.insert(tk.END, "\nEscribe algo más específico.\n")
+            return
+
+        pod = matches[0]
+        run_kubectl(f"describe pod {pod}")
+
+    except Exception as e:
+        output_box.delete("1.0", tk.END)
+        output_box.insert(tk.END, f"Error: {e}\n")
 
 
 def pod_logs_follow() -> None:
@@ -195,6 +241,35 @@ def on_close() -> None:
     else:
         root.destroy()
 
+def find_matching_pods(search_text: str):
+    namespace = namespace_var.get().strip()
+
+    cmd = ["kubectl", "get", "pods", "-o", "name"]
+    if namespace:
+        cmd += ["-n", namespace]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        raise Exception(result.stderr if result.stderr else "No se pudieron obtener los pods.")
+
+    pods = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("pod/"):
+            line = line.replace("pod/", "", 1)
+        if line:
+            pods.append(line)
+
+    search_text = search_text.lower()
+    matches = [pod for pod in pods if search_text in pod.lower()]
+
+    return matches
 
 # -----------------------------
 # UI Setup
@@ -214,7 +289,7 @@ tk.Label(namespace_frame, text="Namespace: ").pack(side=tk.LEFT)
 namespace_var = tk.StringVar()
 namespace_entry = tk.Entry(namespace_frame, textvariable=namespace_var, width=20)
 namespace_entry.pack(side=tk.LEFT, padx=5)
-namespace_var.set("default")
+namespace_var.set("slfsvc-twa07")
 
 tk.Button(namespace_frame, text="Listar Namespaces", command=list_namespaces).pack(side=tk.LEFT, padx=5)
 tk.Button(namespace_frame, text="Ver Services", command=get_services).pack(side=tk.LEFT, padx=5)
