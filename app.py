@@ -316,6 +316,149 @@ def find_matching_pods(search_text: str):
     return matches
 
 # -----------------------------
+# ConfigMaps
+# -----------------------------
+def find_matching_configmaps(search_text: str):
+    namespace = namespace_var.get().strip()
+
+    cmd = ["kubectl", "get", "configmaps", "-o", "name"]
+    if namespace:
+        cmd += ["-n", namespace]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        raise Exception(result.stderr if result.stderr else "No se pudieron obtener los ConfigMaps.")
+
+    items = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("configmap/"):
+            line = line.replace("configmap/", "", 1)
+        if line:
+            items.append(line)
+
+    search_text = search_text.lower().strip()
+
+    if not search_text:
+        return items
+
+    matches = [item for item in items if search_text in item.lower()]
+    return matches
+
+
+def list_configmaps() -> None:
+    search_text = entry_configmap.get().strip()
+
+    try:
+        matches = find_matching_configmaps(search_text)
+
+        configmap_listbox.delete(0, tk.END)
+        output_box.delete("1.0", tk.END)
+
+        if not matches:
+            output_box.insert(tk.END, f"No se encontraron ConfigMaps con: {search_text}\n")
+            return
+
+        for item in matches:
+            configmap_listbox.insert(tk.END, item)
+
+        output_box.insert(tk.END, f"Se encontraron {len(matches)} ConfigMap(s).\n")
+
+    except Exception as e:
+        output_box.delete("1.0", tk.END)
+        output_box.insert(tk.END, f"Error listando ConfigMaps: {e}\n")
+
+
+def load_selected_configmap() -> None:
+    selection = configmap_listbox.curselection()
+
+    if not selection:
+        output_box.delete("1.0", tk.END)
+        output_box.insert(tk.END, "Debes seleccionar un ConfigMap de la lista.\n")
+        return
+
+    configmap_name = configmap_listbox.get(selection[0])
+    namespace = namespace_var.get().strip()
+
+    cmd = ["kubectl", "get", "configmap", configmap_name, "-o", "yaml"]
+    if namespace:
+        cmd += ["-n", namespace]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        yaml_editor.delete("1.0", tk.END)
+        output_box.delete("1.0", tk.END)
+
+        if result.returncode != 0:
+            output_box.insert(tk.END, result.stderr if result.stderr else "No se pudo cargar el ConfigMap.\n")
+            return
+
+        yaml_editor.insert(tk.END, result.stdout)
+        output_box.insert(tk.END, f"ConfigMap '{configmap_name}' cargado.\n")
+
+    except Exception as e:
+        output_box.delete("1.0", tk.END)
+        output_box.insert(tk.END, f"Error cargando ConfigMap: {e}\n")
+
+
+def apply_configmap_changes() -> None:
+    yaml_content = yaml_editor.get("1.0", tk.END).strip()
+
+    if not yaml_content:
+        output_box.delete("1.0", tk.END)
+        output_box.insert(tk.END, "El editor YAML está vacío.\n")
+        return
+
+    confirm = messagebox.askyesno(
+        "Confirmar cambios",
+        "¿Seguro que quieres aplicar los cambios al ConfigMap?"
+    )
+    if not confirm:
+        return
+
+    try:
+        result = subprocess.run(
+            ["kubectl", "apply", "-f", "-"],
+            input=yaml_content,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        output_box.delete("1.0", tk.END)
+
+        if result.stdout:
+            output_box.insert(tk.END, result.stdout + "\n")
+
+        if result.stderr:
+            output_box.insert(tk.END, result.stderr + "\n")
+
+        if result.returncode == 0:
+            output_box.insert(tk.END, "Cambios aplicados correctamente.\n")
+        else:
+            output_box.insert(tk.END, "Hubo un error al aplicar los cambios.\n")
+
+    except Exception as e:
+        output_box.delete("1.0", tk.END)
+        output_box.insert(tk.END, f"Error aplicando ConfigMap: {e}\n")
+
+
+def clear_configmap_editor() -> None:
+    yaml_editor.delete("1.0", tk.END)
+
+# -----------------------------
 # UI Setup
 # -----------------------------
 root = tk.Tk()
@@ -345,10 +488,12 @@ tabs = ttk.Notebook(root)
 tab_pods = ttk.Frame(tabs)
 tab_deploy = ttk.Frame(tabs)
 tab_custom = ttk.Frame(tabs)
+tab_configmaps = ttk.Frame(tabs)
 
 tabs.add(tab_pods, text="Pods")
 tabs.add(tab_deploy, text="Deployments")
 tabs.add(tab_custom, text="Comandos")
+tabs.add(tab_configmaps, text="ConfigMaps")
 tabs.pack(expand=1, fill="both", padx=10, pady=10)
 
 # -----------------------------
@@ -381,6 +526,35 @@ entry_custom.pack(pady=5)
 tk.Button(tab_custom, text="Ejecutar", command=run_custom).pack(pady=5)
 
 # -----------------------------
+# CONFIGMAPS TAB
+# -----------------------------
+configmap_search_frame = tk.Frame(tab_configmaps)
+configmap_search_frame.pack(pady=5, fill="x")
+
+tk.Label(configmap_search_frame, text="Buscar ConfigMap:").pack(side=tk.LEFT, padx=5)
+
+entry_configmap = tk.Entry(configmap_search_frame, width=40)
+entry_configmap.pack(side=tk.LEFT, padx=5)
+
+tk.Button(configmap_search_frame, text="Listar", command=list_configmaps).pack(side=tk.LEFT, padx=5)
+tk.Button(configmap_search_frame, text="Cargar seleccionado", command=load_selected_configmap).pack(side=tk.LEFT, padx=5)
+tk.Button(configmap_search_frame, text="Aplicar cambios", command=apply_configmap_changes).pack(side=tk.LEFT, padx=5)
+tk.Button(configmap_search_frame, text="Limpiar editor", command=clear_configmap_editor).pack(side=tk.LEFT, padx=5)
+
+configmap_list_frame = tk.Frame(tab_configmaps)
+configmap_list_frame.pack(pady=5, fill="both")
+
+tk.Label(configmap_list_frame, text="Coincidencias:").pack(anchor="w", padx=5)
+
+configmap_listbox = tk.Listbox(configmap_list_frame, width=60, height=8)
+configmap_listbox.pack(padx=5, pady=5, fill="x")
+
+tk.Label(tab_configmaps, text="YAML del ConfigMap:").pack(anchor="w", padx=5)
+
+yaml_editor = scrolledtext.ScrolledText(tab_configmaps, width=120, height=22)
+yaml_editor.pack(padx=5, pady=5, fill="both", expand=True)
+
+# -----------------------------
 # OUTPUT WINDOW
 # -----------------------------
 output_box = scrolledtext.ScrolledText(root, width=120, height=28)
@@ -388,3 +562,4 @@ output_box.pack(padx=10, pady=10, fill="both", expand=True)
 
 root.protocol("WM_DELETE_WINDOW", on_close)
 root.mainloop()
+
