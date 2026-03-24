@@ -90,31 +90,31 @@ def list_namespaces() -> None:
         matches = find_matching_namespaces(search_text)
 
         namespace_listbox.delete(0, tk.END)
-        namespace_status_box.delete("1.0", tk.END)
+        clear_output()
 
         if not matches:
-            namespace_status_box.insert(tk.END, f"No se encontraron namespaces con: {search_text}\n")
+            write_output(f"No se encontraron namespaces con: {search_text}\n")
             return
 
         for item in matches:
             namespace_listbox.insert(tk.END, item)
 
-        namespace_status_box.insert(tk.END, f"Se encontraron {len(matches)} namespace(s).\n")
+        write_output(f"Se encontraron {len(matches)} namespace(s).\n")
 
     except FileNotFoundError:
-        namespace_status_box.delete("1.0", tk.END)
-        namespace_status_box.insert(tk.END, "Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
+        clear_output()
+        write_output("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
     except Exception as e:
-        namespace_status_box.delete("1.0", tk.END)
-        namespace_status_box.insert(tk.END, f"Error listando namespaces: {e}\n")
+        clear_output()
+        write_output(f"Error listando namespaces: {e}\n")
 
 
 def continue_with_namespace() -> None:
     selection = namespace_listbox.curselection()
 
     if not selection:
-        namespace_status_box.delete("1.0", tk.END)
-        namespace_status_box.insert(tk.END, "Debes seleccionar un namespace.\n")
+        clear_output()
+        write_output("Debes seleccionar un namespace.\n")
         return
 
     selected_namespace = namespace_listbox.get(selection[0])
@@ -625,12 +625,6 @@ tk.Label(namespace_list_frame, text="Coincidencias:").pack(anchor="w")
 
 namespace_listbox = tk.Listbox(namespace_list_frame, height=6)
 namespace_listbox.pack(fill="x", pady=5)
-
-namespace_status_frame = tk.Frame(namespace_selector_frame)
-namespace_status_frame.pack(fill="x", padx=5, pady=5)
-
-namespace_status_box = scrolledtext.ScrolledText(namespace_status_frame, width=120, height=4, wrap="none")
-namespace_status_box.pack(fill="both", expand=True)
 
 # ---------------------------------
 # Tabs
