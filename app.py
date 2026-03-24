@@ -723,16 +723,16 @@ def describe_selected_pod() -> None:
             check=False
         )
 
-        clear_pods_view()
+        clear_output()
 
         if result.returncode != 0:
-            write_pods_view(result.stderr if result.stderr else "Could not describe the pod.\n")
+            write_output(result.stderr if result.stderr else "Could not describe the pod.\n")
             return
 
-        write_pods_view(result.stdout)
+        write_output(result.stdout)
 
     except Exception as e:
-        write_pods_view(f"Error describing pod: {e}\n")
+        write_output(f"Error describing pod: {e}\n")
 
 
 def read_logs_worker(process):
