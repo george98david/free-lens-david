@@ -866,7 +866,7 @@ def on_mousewheel(event):
 main_canvas.bind_all("<MouseWheel>", on_mousewheel)
 
 # Hidden / logical active namespace
-namespace_var = tk.StringVar(value="")
+namespace_var = tk.StringVar(value="slfsvc-twa07")
 
 # ---------------------------------
 # Namespace Selector
