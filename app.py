@@ -600,7 +600,7 @@ namespace_var = tk.StringVar(value="")
 # Selector de Namespace (nuevo)
 # ---------------------------------
 namespace_selector_frame = tk.LabelFrame(root, text="Selector de Namespace")
-namespace_selector_frame.pack(fill="x", padx=10, pady=10)
+namespace_selector_frame.pack(fill="x", padx=10, pady=5)
 
 namespace_search_row = tk.Frame(namespace_selector_frame)
 namespace_search_row.pack(fill="x", padx=5, pady=5)
@@ -623,7 +623,7 @@ namespace_list_frame.pack(fill="x", padx=5, pady=5)
 
 tk.Label(namespace_list_frame, text="Coincidencias:").pack(anchor="w")
 
-namespace_listbox = tk.Listbox(namespace_list_frame, height=6)
+namespace_listbox = tk.Listbox(namespace_list_frame, height=3)
 namespace_listbox.pack(fill="x", pady=5)
 
 # ---------------------------------
@@ -675,7 +675,7 @@ yaml_middle_frame.pack(fill="x", padx=5, pady=5)
 
 tk.Label(yaml_middle_frame, text="Coincidencias:").pack(anchor="w")
 
-yaml_resource_listbox = tk.Listbox(yaml_middle_frame, height=6)
+yaml_resource_listbox = tk.Listbox(yaml_middle_frame, height=4)
 yaml_resource_listbox.pack(fill="x", pady=5)
 yaml_resource_listbox.bind("<Double-Button-1>", lambda event: load_selected_yaml_resource())
 
@@ -697,9 +697,9 @@ yaml_editor_notebook.pack(fill="both", expand=True, padx=5, pady=5)
 
 # Output
 output_frame = tk.LabelFrame(root, text="Salida / Mensajes")
-output_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-output_box = scrolledtext.ScrolledText(output_frame, width=120, height=10, wrap="none")
+output_frame.pack(fill="x", expand=True, padx=10, pady=10)
+namespace_selector_frame.pack(fill="x", padx=10, pady=10)
+output_box = scrolledtext.ScrolledText(output_frame, width=120, height=7, wrap="none")
 output_box.pack(fill="both", expand=True, padx=5, pady=5)
 
 root.mainloop()
