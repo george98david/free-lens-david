@@ -39,6 +39,19 @@ def append_output_threadsafe(text: str):
 def clear_output_threadsafe():
     root.after(0, lambda: output_box.delete("1.0", tk.END))
 
+def clear_pods_view():
+    pods_view_box.delete("1.0", tk.END)
+
+def write_pods_view(text: str):
+    pods_view_box.delete("1.0", tk.END)
+    pods_view_box.insert(tk.END, text)
+
+def append_pods_view(text: str):
+    pods_view_box.insert(tk.END, text)
+
+def append_pods_view_threadsafe(text: str):
+    root.after(0, lambda: pods_view_box.insert(tk.END, text))
+
 # -----------------------------
 # General lower section reset
 # -----------------------------
@@ -63,6 +76,7 @@ def reset_yaml_area():
     yaml_tab_counter = 0
 
     clear_output()
+    clear_pods_view()
 
 
 # -----------------------------
@@ -709,16 +723,16 @@ def describe_selected_pod() -> None:
             check=False
         )
 
-        clear_output()
+        clear_pods_view()
 
         if result.returncode != 0:
-            write_output(result.stderr if result.stderr else "Could not describe the pod.\n")
+            write_pods_view(result.stderr if result.stderr else "Could not describe the pod.\n")
             return
 
-        write_output(result.stdout)
+        write_pods_view(result.stdout)
 
     except Exception as e:
-        write_output(f"Error describing pod: {e}\n")
+        write_pods_view(f"Error describing pod: {e}\n")
 
 
 def read_logs_worker(process):
@@ -728,14 +742,14 @@ def read_logs_worker(process):
         for line in process.stdout:
             if process != logs_process:
                 break
-            append_output_threadsafe(line)
+            append_pods_view_threadsafe(line)
 
         stderr_text = process.stderr.read()
         if stderr_text:
-            append_output_threadsafe("\n" + stderr_text)
+            append_pods_view_threadsafe("\n" + stderr_text)
 
     except Exception as e:
-        append_output_threadsafe(f"\nError reading logs: {e}\n")
+        append_pods_view_threadsafe(f"\nError reading logs: {e}\n")
 
 
 def start_logs_selected_pod() -> None:
@@ -759,8 +773,8 @@ def start_logs_selected_pod() -> None:
         cmd += ["--tail", tail_value]
 
     try:
-        clear_output()
-        write_output(f"Streaming logs for pod: {pod_name}\n\n")
+        clear_pods_view()
+        write_pods_view(f"Streaming logs for pod: {pod_name}\n\n")
 
         logs_process = subprocess.Popen(
             cmd,
@@ -775,7 +789,7 @@ def start_logs_selected_pod() -> None:
         logs_thread.start()
 
     except Exception as e:
-        write_output(f"Error starting live logs: {e}\n")
+        write_pods_view(f"Error starting live logs: {e}\n")
 
 
 def stop_logs() -> None:
@@ -818,16 +832,16 @@ def show_previous_logs_selected_pod() -> None:
             check=False
         )
 
-        clear_output()
+        clear_pods_view()
 
         if result.returncode != 0:
-            write_output(result.stderr if result.stderr else "Could not retrieve pod logs.\n")
+            write_pods_view(result.stderr if result.stderr else "Could not retrieve pod logs.\n")
             return
 
-        write_output(result.stdout if result.stdout else "No logs available.\n")
+        write_pods_view(result.stdout if result.stdout else "No logs available.\n")
 
     except Exception as e:
-        write_output(f"Error retrieving logs: {e}\n")
+        write_pods_view(f"Error retrieving logs: {e}\n")
 
 
 # -----------------------------
@@ -1006,6 +1020,18 @@ entry_log_tail.insert(0, "100")
 tk.Button(pods_logs_frame, text="View Logs", command=show_previous_logs_selected_pod).pack(side=tk.LEFT, padx=5)
 tk.Button(pods_logs_frame, text="Live Logs", command=start_logs_selected_pod).pack(side=tk.LEFT, padx=5)
 tk.Button(pods_logs_frame, text="Stop Logs", command=stop_logs).pack(side=tk.LEFT, padx=5)
+
+# Central Pods viewer
+pods_view_frame = tk.LabelFrame(tab_pods, text="Pod Describe / Logs")
+pods_view_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+pods_view_box = scrolledtext.ScrolledText(
+    pods_view_frame,
+    wrap="none",
+    height=20,
+    font=("Consolas", 10)
+)
+pods_view_box.pack(fill="both", expand=True, padx=5, pady=5)
 
 # Output
 output_frame = tk.LabelFrame(main_container, text="Output / Messages")
