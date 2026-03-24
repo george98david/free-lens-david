@@ -978,11 +978,12 @@ def on_mousewheel(event):
 
     # Listbox
     if isinstance(widget, tk.Listbox):
-        try:
-            widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            return "break"
-        except Exception:
-            pass
+    try:
+        direction = -1 if event.delta > 0 else 1
+        widget.yview_scroll(direction, "units")
+        return "break"
+    except Exception:
+        pass
 
     # Fallback: main window
     main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
