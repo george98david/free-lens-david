@@ -877,18 +877,26 @@ tabs.add(tab_configmaps, text="ConfigMaps")
 tabs.pack(expand=1, fill="both", padx=10, pady=10)
 
 # -----------------------------
-# PODS TAB
+# PODS TAB (HORIZONTAL)
 # -----------------------------
-tk.Button(tab_pods, text="Listar Pods", command=list_pods).pack(pady=5)
 
-entry_pod = tk.Entry(tab_pods, width=40)
-entry_pod.pack(pady=5)
+pods_top_frame = tk.Frame(tab_pods)
+pods_top_frame.pack(pady=15)
+
+# Input
+entry_pod = tk.Entry(pods_top_frame, width=40)
+entry_pod.pack(side=tk.LEFT, padx=5)
 entry_pod.insert(0, "nombre-del-pod")
 
-tk.Button(tab_pods, text="Ver Logs", command=pod_logs).pack(pady=2)
-tk.Button(tab_pods, text="Seguir Logs (-f)", command=pod_logs_follow).pack(pady=2)
-tk.Button(tab_pods, text="Detener Logs", command=stop_follow).pack(pady=2)
-tk.Button(tab_pods, text="Describe Pod", command=pod_describe).pack(pady=2)
+# Botones en horizontal (a la derecha)
+buttons_frame = tk.Frame(pods_top_frame)
+buttons_frame.pack(side=tk.LEFT)
+
+tk.Button(buttons_frame, text="Listar Pods", command=list_pods).pack(side=tk.LEFT, padx=3)
+tk.Button(buttons_frame, text="Ver Logs", command=pod_logs).pack(side=tk.LEFT, padx=3)
+tk.Button(buttons_frame, text="Seguir Logs (-f)", command=pod_logs_follow).pack(side=tk.LEFT, padx=3)
+tk.Button(buttons_frame, text="Detener Logs", command=stop_follow).pack(side=tk.LEFT, padx=3)
+tk.Button(buttons_frame, text="Describe Pod", command=pod_describe).pack(side=tk.LEFT, padx=3)
 
 # -----------------------------
 # DEPLOYMENTS TAB
