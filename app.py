@@ -958,9 +958,28 @@ main_container.bind("<Configure>", update_scrollregion)
 main_canvas.bind("<Configure>", resize_canvas_content)
 
 def on_mousewheel(event):
+    widget = event.widget
+
+    # Si estás dentro de un ScrolledText o Text → scrollea ese widget
+    if isinstance(widget, (tk.Text, scrolledtext.ScrolledText)):
+        try:
+            widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            return "break"
+        except Exception:
+            pass
+
+    # Si estás dentro del Treeview (lista de pods)
+    if isinstance(widget, ttk.Treeview):
+        try:
+            widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            return "break"
+        except Exception:
+            pass
+
+    # Si no, scrollea la ventana principal
     main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-main_canvas.bind_all("<MouseWheel>", on_mousewheel)
+root.bind_all("<MouseWheel>", on_mousewheel)
 
 # Hidden / logical active namespace
 namespace_var = tk.StringVar(value="slfsvc-twa07")
@@ -1181,6 +1200,6 @@ def on_close():
 root.protocol("WM_DELETE_WINDOW", on_close)
 
 refresh_pod_status_filters()
-list_pods()
+#list_pods()
 
 root.mainloop()
