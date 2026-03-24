@@ -66,7 +66,9 @@ def reset_yaml_area():
 
     # Clear pods search and list
     entry_pod_search.delete(0, tk.END)
-    pod_listbox.delete(0, tk.END)
+
+    for row in pod_tree.get_children():
+        pod_tree.delete(row)
 
     # Close all YAML editor tabs
     for tab_id in yaml_editor_notebook.tabs():
@@ -626,7 +628,7 @@ def reload_current_yaml_from_cluster() -> None:
 def get_all_pods():
     namespace = namespace_var.get().strip()
 
-    cmd = ["kubectl", "get", "pods", "-o", "name"]
+    cmd = ["kubectl", "get", "pods", "--no-headers"]
     if namespace:
         cmd += ["-n", namespace]
 
@@ -641,27 +643,66 @@ def get_all_pods():
         raise Exception(result.stderr if result.stderr else "Could not retrieve pods.")
 
     items = []
+
     for line in result.stdout.splitlines():
         line = line.strip()
         if not line:
             continue
 
-        if line.startswith("pod/"):
-            line = line.replace("pod/", "", 1)
+        parts = line.split()
+        if len(parts) < 5:
+            continue
 
-        items.append(line)
+        name = parts[0]
+        ready = parts[1]
+        status = parts[2]
+        restarts = parts[3]
+        age = parts[4]
+
+        items.append({
+            "name": name,
+            "ready": ready,
+            "status": status,
+            "restarts": restarts,
+            "age": age
+        })
 
     return items
+
+
+def get_selected_status_filters():
+    selected_indices = pod_status_listbox.curselection()
+
+    if not selected_indices:
+        return {"All"}
+
+    values = {pod_status_listbox.get(i) for i in selected_indices}
+
+    if "All" in values:
+        return {"All"}
+
+    return values
 
 
 def find_matching_pods(search_text: str):
     items = get_all_pods()
     search_text = search_text.strip().lower()
+    selected_statuses = get_selected_status_filters()
 
-    if not search_text:
-        return items
+    filtered = []
 
-    return [item for item in items if search_text in item.lower()]
+    for item in items:
+        name_match = not search_text or search_text in item["name"].lower()
+
+        status_match = (
+            "All" in selected_statuses or
+            item["status"] in selected_statuses
+        )
+
+        if name_match and status_match:
+            filtered.append(item)
+
+    return filtered
 
 
 def list_pods() -> None:
@@ -670,7 +711,9 @@ def list_pods() -> None:
     try:
         matches = find_matching_pods(search_text)
 
-        pod_listbox.delete(0, tk.END)
+        for row in pod_tree.get_children():
+            pod_tree.delete(row)
+
         clear_output()
 
         if not matches:
@@ -678,10 +721,22 @@ def list_pods() -> None:
             return
 
         for item in matches:
-            pod_listbox.insert(tk.END, item)
+            pod_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    item["name"],
+                    item["ready"],
+                    item["status"],
+                    item["restarts"],
+                    item["age"]
+                )
+            )
 
+        selected_statuses = get_selected_status_filters()
         write_output(
             f"Active namespace: {namespace_var.get().strip() or '(no namespace)'}\n"
+            f"Status filter: {', '.join(sorted(selected_statuses))}\n"
             f"Found {len(matches)} pod(s).\n"
         )
 
@@ -694,13 +749,20 @@ def list_pods() -> None:
 
 
 def get_selected_pod():
-    selection = pod_listbox.curselection()
+    selection = pod_tree.selection()
 
     if not selection:
         write_output("You must select a pod from the list.\n")
         return None
 
-    return pod_listbox.get(selection[0])
+    item_id = selection[0]
+    values = pod_tree.item(item_id, "values")
+
+    if not values:
+        write_output("Invalid pod selection.\n")
+        return None
+
+    return values[0]
 
 
 def describe_selected_pod() -> None:
@@ -842,6 +904,27 @@ def show_previous_logs_selected_pod() -> None:
 
     except Exception as e:
         write_pods_view(f"Error retrieving logs: {e}\n")
+
+
+def refresh_pod_status_filters():
+    try:
+        pods = get_all_pods()
+        statuses = sorted({item["status"] for item in pods if item["status"]})
+
+        pod_status_listbox.delete(0, tk.END)
+        pod_status_listbox.insert(tk.END, "All")
+
+        for status in statuses:
+            pod_status_listbox.insert(tk.END, status)
+
+        pod_status_listbox.selection_clear(0, tk.END)
+        pod_status_listbox.selection_set(0)
+
+    except Exception:
+        pod_status_listbox.delete(0, tk.END)
+        pod_status_listbox.insert(tk.END, "All")
+        pod_status_listbox.selection_clear(0, tk.END)
+        pod_status_listbox.selection_set(0)
 
 
 # -----------------------------
@@ -991,21 +1074,72 @@ pods_top_frame.pack(fill="x", padx=5, pady=5)
 
 tk.Label(pods_top_frame, text="Search pod:").pack(side=tk.LEFT, padx=5)
 
-entry_pod_search = tk.Entry(pods_top_frame, width=60)
+entry_pod_search = tk.Entry(pods_top_frame, width=50)
 entry_pod_search.pack(side=tk.LEFT, padx=5)
 
-tk.Button(pods_top_frame, text="List Pods", command=list_pods).pack(side=tk.LEFT, padx=5)
+tk.Button(
+    pods_top_frame,
+    text="List Pods",
+    command=lambda: (refresh_pod_status_filters(), list_pods())
+).pack(side=tk.LEFT, padx=5)
+
 tk.Button(pods_top_frame, text="Describe Selected", command=describe_selected_pod).pack(side=tk.LEFT, padx=5)
 
-# Matches list
+# Filters + pod table area
 pods_middle_frame = tk.Frame(tab_pods)
 pods_middle_frame.pack(fill="x", padx=5, pady=5)
 
-tk.Label(pods_middle_frame, text="Matches:").pack(anchor="w")
+# Left filter panel
+pods_filter_frame = tk.LabelFrame(pods_middle_frame, text="Status Filter")
+pods_filter_frame.pack(side=tk.LEFT, fill="y", padx=(0, 10), pady=5)
 
-pod_listbox = tk.Listbox(pods_middle_frame, height=6)
-pod_listbox.pack(fill="both", expand=True, pady=5)
-pod_listbox.bind("<Double-Button-1>", lambda event: describe_selected_pod())
+tk.Label(pods_filter_frame, text="Select one or more:").pack(anchor="w", padx=5, pady=(5, 2))
+
+pod_status_listbox = tk.Listbox(
+    pods_filter_frame,
+    selectmode=tk.MULTIPLE,
+    exportselection=False,
+    height=6
+)
+pod_status_listbox.pack(fill="y", padx=5, pady=5)
+
+pod_status_listbox.insert(tk.END, "All")
+pod_status_listbox.selection_set(0)
+
+tk.Button(pods_filter_frame, text="Apply Filter", command=list_pods).pack(fill="x", padx=5, pady=(0, 5))
+
+# Right table panel
+pods_table_frame = tk.Frame(pods_middle_frame)
+pods_table_frame.pack(side=tk.LEFT, fill="both", expand=True)
+
+tk.Label(pods_table_frame, text="Matches:").pack(anchor="w")
+
+pod_tree = ttk.Treeview(
+    pods_table_frame,
+    columns=("name", "ready", "status", "restarts", "age"),
+    show="headings",
+    height=8
+)
+
+pod_tree.heading("name", text="Name")
+pod_tree.heading("ready", text="Ready")
+pod_tree.heading("status", text="Status")
+pod_tree.heading("restarts", text="Restarts")
+pod_tree.heading("age", text="Age")
+
+pod_tree.column("name", width=460, anchor="w")
+pod_tree.column("ready", width=90, anchor="center")
+pod_tree.column("status", width=140, anchor="center")
+pod_tree.column("restarts", width=90, anchor="center")
+pod_tree.column("age", width=90, anchor="center")
+
+pod_tree.pack(side=tk.LEFT, fill="both", expand=True, pady=5)
+
+pod_tree_scroll = tk.Scrollbar(pods_table_frame, orient="vertical", command=pod_tree.yview)
+pod_tree_scroll.pack(side=tk.RIGHT, fill="y")
+pod_tree.configure(yscrollcommand=pod_tree_scroll.set)
+
+pod_tree.bind("<Double-Button-1>", lambda event: describe_selected_pod())
 
 # Logs actions
 pods_logs_frame = tk.Frame(tab_pods)
@@ -1022,7 +1156,7 @@ tk.Button(pods_logs_frame, text="Live Logs", command=start_logs_selected_pod).pa
 tk.Button(pods_logs_frame, text="Stop Logs", command=stop_logs).pack(side=tk.LEFT, padx=5)
 
 # Central Pods viewer
-pods_view_frame = tk.LabelFrame(tab_pods, text="Pod Describe / Logs")
+pods_view_frame = tk.LabelFrame(tab_pods, text="Pod Logs")
 pods_view_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
 pods_view_box = scrolledtext.ScrolledText(
@@ -1045,4 +1179,8 @@ def on_close():
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_close)
+
+refresh_pod_status_filters()
+list_pods()
+
 root.mainloop()
