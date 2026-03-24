@@ -1019,3 +1019,4 @@ def on_close():
     root.destroy()
 
 root.protocol("WM_DELETE_WINDOW", on_close)
+root.mainloop()
