@@ -60,16 +60,15 @@ def list_pods() -> None:
         )
 
         clear_top()
-        clear_bottom()
 
         if result.returncode != 0:
-            write_bottom(result.stderr if result.stderr else "Error listando pods.\n")
+            write_top(result.stderr if result.stderr else "Error listando pods.\n")
             return
 
         lines = result.stdout.splitlines()
 
         if not lines:
-            write_bottom("No hay pods.\n")
+            write_top("No hay pods.\n")
             return
 
         if search_text:
@@ -78,42 +77,37 @@ def list_pods() -> None:
             filtered = lines[1:]
 
         if not filtered:
-            write_bottom(f"No hay pods que coincidan con '{search_text}'\n")
+            write_top(f"No hay pods que coincidan con '{search_text}'\n")
             return
 
         final_text = lines[0] + "\n" + "\n".join(filtered)
         write_top(final_text)
 
-        write_bottom(f"Se listaron {len(filtered)} pod(s).\n")
-
     except Exception as e:
-        write_bottom(f"Error: {e}\n")
-
+        write_top(f"Error: {e}\n")
 
 def list_deployments() -> None:
     run_kubectl("get deployments -o wide")
-
 
 def pod_logs() -> None:
     search_text = entry_pod.get().strip()
 
     if not search_text or search_text == "nombre-del-pod":
-        write_bottom("Debes ingresar parte del nombre del pod.\n")
+        write_top("Debes ingresar parte del nombre del pod.\n")
         return
 
     try:
         matches = find_matching_pods(search_text)
 
         if not matches:
-            write_bottom(f"No se encontraron pods que coincidan con: {search_text}\n")
+            write_top(f"No se encontraron pods que coincidan con: {search_text}\n")
             return
 
         if len(matches) > 1:
-            write_top("Se encontraron varios pods para '{}':\n\n{}".format(
-                search_text,
+            write_top(
+                f"Se encontraron varios pods para '{search_text}':\n\n" +
                 "\n".join(f"- {pod}" for pod in matches)
-            ))
-            write_bottom("Hay varias coincidencias. Escribe algo más específico.\n")
+            )
             return
 
         pod = matches[0]
@@ -131,35 +125,33 @@ def pod_logs() -> None:
         )
 
         if result.returncode != 0:
-            write_bottom(result.stderr if result.stderr else f"No se pudieron obtener logs de {pod}\n")
+            write_top(result.stderr if result.stderr else f"No se pudieron obtener logs de {pod}\n")
             return
 
-        write_main(result.stdout if result.stdout else "Sin logs.\n")
-        write_bottom(f"Logs cargados para pod: {pod}\n")
+        write_top(result.stdout if result.stdout else "Sin logs.\n")
 
     except Exception as e:
-        write_bottom(f"Error: {e}\n")
+        write_top(f"Error: {e}\n")
 
 def pod_describe() -> None:
     search_text = entry_pod.get().strip()
 
     if not search_text or search_text == "nombre-del-pod":
-        write_bottom("Debes ingresar parte del nombre del pod.\n")
+        write_top("Debes ingresar parte del nombre del pod.\n")
         return
 
     try:
         matches = find_matching_pods(search_text)
 
         if not matches:
-            write_bottom(f"No se encontraron pods que coincidan con: {search_text}\n")
+            write_top(f"No se encontraron pods que coincidan con: {search_text}\n")
             return
 
         if len(matches) > 1:
-            write_top("Se encontraron varios pods para '{}':\n\n{}".format(
-                search_text,
+            write_top(
+                f"Se encontraron varios pods para '{search_text}':\n\n" +
                 "\n".join(f"- {pod}" for pod in matches)
-            ))
-            write_bottom("Hay varias coincidencias. Escribe algo más específico.\n")
+            )
             return
 
         pod = matches[0]
@@ -177,19 +169,19 @@ def pod_describe() -> None:
         )
 
         if result.returncode != 0:
-            write_bottom(result.stderr if result.stderr else f"No se pudo describir el pod {pod}\n")
+            write_top(result.stderr if result.stderr else f"No se pudo describir el pod {pod}\n")
             return
 
         write_bottom(result.stdout if result.stdout else "Sin describe.\n")
 
     except Exception as e:
-        write_bottom(f"Error: {e}\n")
+        write_top(f"Error: {e}\n")
 
 
 def pod_logs_follow() -> None:
     pod = entry_pod.get().strip()
     if not pod or pod == "nombre-del-pod":
-        output_box.insert(tk.END, "\nDebes ingresar el nombre del pod.\n")
+        write_top("Debes ingresar el nombre del pod.\n")
         return
 
     namespace = namespace_var.get().strip()
@@ -199,7 +191,8 @@ def pod_logs_follow() -> None:
         cmd += ["-n", namespace]
 
     try:
-        output_box.delete("1.0", tk.END)
+        clear_top()
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -208,8 +201,7 @@ def pod_logs_follow() -> None:
         )
 
         current_process["proc"] = process
-        write_bottom(f"Siguiendo logs de {pod}...\n")
-        output_box.insert(tk.END, f"Siguiendo logs de {pod}...\n\n")
+        top_box.insert(tk.END, f"Siguiendo logs de {pod}...\n\n")
 
         def stream_output():
             proc = current_process["proc"]
@@ -218,17 +210,22 @@ def pod_logs_follow() -> None:
 
             line = proc.stdout.readline()
             if line:
-                main_box.insert(tk.END, line)
-                main_box.see(tk.END)
+                top_box.insert(tk.END, line)
+                top_box.see(tk.END)
                 root.after(50, stream_output)
             else:
                 if proc.poll() is None:
                     root.after(100, stream_output)
                 else:
-                    append_bottom("Proceso finalizado.\n")
+                    top_box.insert(tk.END, "\n\nProceso finalizado.\n")
                     current_process["proc"] = None
 
         stream_output()
+
+    except FileNotFoundError:
+        write_top("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
+    except Exception as e:
+        write_top(f"Error inesperado: {e}\n")
 
     except FileNotFoundError:
         clear_main()
@@ -246,9 +243,9 @@ def stop_follow() -> None:
     if proc is not None and proc.poll() is None:
         proc.terminate()
         current_process["proc"] = None
-        append_bottom("Seguimiento detenido.\n")
+        top_box.insert(tk.END, "\n\nSeguimiento detenido.\n")
     else:
-        append_bottom("No hay ningún proceso en seguimiento.\n")
+        top_box.insert(tk.END, "\nNo hay ningún proceso en seguimiento.\n")
 
 
 def run_custom() -> None:
