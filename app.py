@@ -591,7 +591,31 @@ def reload_current_yaml_from_cluster() -> None:
 # -----------------------------
 root = tk.Tk()
 root.title("Mini Kubernetes UI - YAML Studio")
-root.geometry("1100x760")
+root.state("zoomed")  # pantalla completa en Windows / la mayoría
+
+# -----------------------------
+# CONTENEDOR PRINCIPAL CON SCROLL
+# -----------------------------
+main_canvas = tk.Canvas(root)
+main_scrollbar = tk.Scrollbar(root, orient="vertical", command=main_canvas.yview)
+
+main_canvas.configure(yscrollcommand=main_scrollbar.set)
+
+main_scrollbar.pack(side="right", fill="y")
+main_canvas.pack(side="left", fill="both", expand=True)
+
+main_container = tk.Frame(main_canvas)
+main_canvas.create_window((0, 0), window=main_container, anchor="nw")
+
+def update_scrollregion(event=None):
+    main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+
+main_container.bind("<Configure>", update_scrollregion)
+
+def on_mousewheel(event):
+    main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+main_canvas.bind_all("<MouseWheel>", on_mousewheel)
 
 # Namespace activo oculto / lógico
 namespace_var = tk.StringVar(value="")
@@ -599,7 +623,7 @@ namespace_var = tk.StringVar(value="")
 # ---------------------------------
 # Selector de Namespace (nuevo)
 # ---------------------------------
-namespace_selector_frame = tk.LabelFrame(root, text="Selector de Namespace")
+namespace_selector_frame = tk.LabelFrame(main_container, text="Selector de Namespace")
 namespace_selector_frame.pack(fill="x", padx=10, pady=5)
 
 namespace_search_row = tk.Frame(namespace_selector_frame)
@@ -629,11 +653,11 @@ namespace_listbox.pack(fill="x", pady=5)
 # ---------------------------------
 # Tabs
 # ---------------------------------
-tabs = ttk.Notebook(root)
+tabs = ttk.Notebook(main_container)
 tab_yaml = ttk.Frame(tabs)
 
 tabs.add(tab_yaml, text="ConfigMaps / YAML Studio")
-tabs.pack(expand=1, fill="both", padx=10, pady=10)
+tabs.pack(fill="both", padx=10, pady=10)
 
 # Top controls
 yaml_top_frame = tk.Frame(tab_yaml)
@@ -693,13 +717,13 @@ tk.Button(yaml_actions_frame, text="Cerrar tab", command=close_current_yaml_tab)
 
 # Editor notebook
 yaml_editor_notebook = ttk.Notebook(tab_yaml)
-yaml_editor_notebook.pack(fill="both", expand=True, padx=5, pady=5)
+yaml_editor_notebook.pack(fill="both", padx=5, pady=5)
 
 # Output
-output_frame = tk.LabelFrame(root, text="Salida / Mensajes")
-output_frame.pack(fill="x", expand=True, padx=10, pady=10)
+output_frame = tk.LabelFrame(main_container, text="Salida / Mensajes")
+output_frame.pack(fill="x", padx=10, pady=10)
 namespace_selector_frame.pack(fill="x", padx=10, pady=10)
 output_box = scrolledtext.ScrolledText(output_frame, width=120, height=7, wrap="none")
-output_box.pack(fill="both", expand=True, padx=5, pady=5)
+output_box.pack(fill="both", padx=5, pady=5)
 
 root.mainloop()
