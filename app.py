@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 import subprocess
 import os
+import threading
 
 
 # -----------------------------
@@ -9,6 +10,14 @@ import os
 # -----------------------------
 yaml_tab_counter = 0
 yaml_tabs_data = {}
+
+
+# -----------------------------
+# Global Pods logs state
+# -----------------------------
+logs_process = None
+logs_thread = None
+current_log_pod = None
 
 
 # -----------------------------
@@ -24,6 +33,11 @@ def write_output(text: str):
 def append_output(text: str):
     output_box.insert(tk.END, text)
 
+def append_output_threadsafe(text: str):
+    root.after(0, lambda: output_box.insert(tk.END, text))
+
+def clear_output_threadsafe():
+    root.after(0, lambda: output_box.delete("1.0", tk.END))
 
 # -----------------------------
 # General lower section reset
@@ -31,9 +45,15 @@ def append_output(text: str):
 def reset_yaml_area():
     global yaml_tab_counter, yaml_tabs_data
 
-    # Clear search and resource list
+    stop_logs()
+
+    # Clear YAML search and resources
     entry_yaml_search.delete(0, tk.END)
     yaml_resource_listbox.delete(0, tk.END)
+
+    # Clear pods search and list
+    entry_pod_search.delete(0, tk.END)
+    pod_listbox.delete(0, tk.END)
 
     # Close all YAML editor tabs
     for tab_id in yaml_editor_notebook.tabs():
@@ -587,6 +607,230 @@ def reload_current_yaml_from_cluster() -> None:
 
 
 # -----------------------------
+# Pods helpers
+# -----------------------------
+def get_all_pods():
+    namespace = namespace_var.get().strip()
+
+    cmd = ["kubectl", "get", "pods", "-o", "name"]
+    if namespace:
+        cmd += ["-n", namespace]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        raise Exception(result.stderr if result.stderr else "Could not retrieve pods.")
+
+    items = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        if line.startswith("pod/"):
+            line = line.replace("pod/", "", 1)
+
+        items.append(line)
+
+    return items
+
+
+def find_matching_pods(search_text: str):
+    items = get_all_pods()
+    search_text = search_text.strip().lower()
+
+    if not search_text:
+        return items
+
+    return [item for item in items if search_text in item.lower()]
+
+
+def list_pods() -> None:
+    search_text = entry_pod_search.get().strip()
+
+    try:
+        matches = find_matching_pods(search_text)
+
+        pod_listbox.delete(0, tk.END)
+        clear_output()
+
+        if not matches:
+            write_output(f"No pods found matching: {search_text}\n")
+            return
+
+        for item in matches:
+            pod_listbox.insert(tk.END, item)
+
+        write_output(
+            f"Active namespace: {namespace_var.get().strip() or '(no namespace)'}\n"
+            f"Found {len(matches)} pod(s).\n"
+        )
+
+    except FileNotFoundError:
+        clear_output()
+        write_output("Error: 'kubectl' was not found. Make sure it is installed and available in PATH.\n")
+    except Exception as e:
+        clear_output()
+        write_output(f"Error listing pods: {e}\n")
+
+
+def get_selected_pod():
+    selection = pod_listbox.curselection()
+
+    if not selection:
+        write_output("You must select a pod from the list.\n")
+        return None
+
+    return pod_listbox.get(selection[0])
+
+
+def describe_selected_pod() -> None:
+    pod_name = get_selected_pod()
+    if not pod_name:
+        return
+
+    stop_logs()
+
+    namespace = namespace_var.get().strip()
+    cmd = ["kubectl", "describe", "pod", pod_name]
+    if namespace:
+        cmd += ["-n", namespace]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        clear_output()
+
+        if result.returncode != 0:
+            write_output(result.stderr if result.stderr else "Could not describe the pod.\n")
+            return
+
+        write_output(result.stdout)
+
+    except Exception as e:
+        write_output(f"Error describing pod: {e}\n")
+
+
+def read_logs_worker(process):
+    global logs_process
+
+    try:
+        for line in process.stdout:
+            if process != logs_process:
+                break
+            append_output_threadsafe(line)
+
+        stderr_text = process.stderr.read()
+        if stderr_text:
+            append_output_threadsafe("\n" + stderr_text)
+
+    except Exception as e:
+        append_output_threadsafe(f"\nError reading logs: {e}\n")
+
+
+def start_logs_selected_pod() -> None:
+    global logs_process, logs_thread, current_log_pod
+
+    pod_name = get_selected_pod()
+    if not pod_name:
+        return
+
+    stop_logs()
+
+    namespace = namespace_var.get().strip()
+    tail_value = entry_log_tail.get().strip()
+
+    cmd = ["kubectl", "logs", "-f", pod_name]
+
+    if namespace:
+        cmd += ["-n", namespace]
+
+    if tail_value:
+        cmd += ["--tail", tail_value]
+
+    try:
+        clear_output()
+        write_output(f"Streaming logs for pod: {pod_name}\n\n")
+
+        logs_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
+
+        current_log_pod = pod_name
+        logs_thread = threading.Thread(target=read_logs_worker, args=(logs_process,), daemon=True)
+        logs_thread.start()
+
+    except Exception as e:
+        write_output(f"Error starting live logs: {e}\n")
+
+
+def stop_logs() -> None:
+    global logs_process, logs_thread, current_log_pod
+
+    if logs_process is not None:
+        try:
+            logs_process.terminate()
+        except Exception:
+            pass
+
+        logs_process = None
+        logs_thread = None
+        current_log_pod = None
+
+
+def show_previous_logs_selected_pod() -> None:
+    pod_name = get_selected_pod()
+    if not pod_name:
+        return
+
+    stop_logs()
+
+    namespace = namespace_var.get().strip()
+    tail_value = entry_log_tail.get().strip()
+
+    cmd = ["kubectl", "logs", pod_name]
+
+    if namespace:
+        cmd += ["-n", namespace]
+
+    if tail_value:
+        cmd += ["--tail", tail_value]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        clear_output()
+
+        if result.returncode != 0:
+            write_output(result.stderr if result.stderr else "Could not retrieve pod logs.\n")
+            return
+
+        write_output(result.stdout if result.stdout else "No logs available.\n")
+
+    except Exception as e:
+        write_output(f"Error retrieving logs: {e}\n")
+
+
+# -----------------------------
 # UI
 # -----------------------------
 root = tk.Tk()
@@ -659,8 +903,10 @@ namespace_listbox.pack(fill="x", pady=5)
 # ---------------------------------
 tabs = ttk.Notebook(main_container)
 tab_yaml = ttk.Frame(tabs)
+tab_pods = ttk.Frame(tabs)
 
 tabs.add(tab_yaml, text="ConfigMaps / YAML Studio")
+tabs.add(tab_pods, text="Pods")
 tabs.pack(fill="both", padx=10, pady=10)
 
 # Top controls
@@ -723,11 +969,53 @@ tk.Button(yaml_actions_frame, text="Close Tab", command=close_current_yaml_tab).
 yaml_editor_notebook = ttk.Notebook(tab_yaml)
 yaml_editor_notebook.pack(fill="both", padx=5, pady=5)
 
+# ---------------------------------
+# Pods tab
+# ---------------------------------
+pods_top_frame = tk.Frame(tab_pods)
+pods_top_frame.pack(fill="x", padx=5, pady=5)
+
+tk.Label(pods_top_frame, text="Search pod:").pack(side=tk.LEFT, padx=5)
+
+entry_pod_search = tk.Entry(pods_top_frame, width=60)
+entry_pod_search.pack(side=tk.LEFT, padx=5)
+
+tk.Button(pods_top_frame, text="List Pods", command=list_pods).pack(side=tk.LEFT, padx=5)
+tk.Button(pods_top_frame, text="Describe Selected", command=describe_selected_pod).pack(side=tk.LEFT, padx=5)
+
+# Matches list
+pods_middle_frame = tk.Frame(tab_pods)
+pods_middle_frame.pack(fill="x", padx=5, pady=5)
+
+tk.Label(pods_middle_frame, text="Matches:").pack(anchor="w")
+
+pod_listbox = tk.Listbox(pods_middle_frame, height=6)
+pod_listbox.pack(fill="both", expand=True, pady=5)
+pod_listbox.bind("<Double-Button-1>", lambda event: describe_selected_pod())
+
+# Logs actions
+pods_logs_frame = tk.Frame(tab_pods)
+pods_logs_frame.pack(fill="x", padx=5, pady=5)
+
+tk.Label(pods_logs_frame, text="Tail:").pack(side=tk.LEFT, padx=5)
+
+entry_log_tail = tk.Entry(pods_logs_frame, width=10)
+entry_log_tail.pack(side=tk.LEFT, padx=5)
+entry_log_tail.insert(0, "100")
+
+tk.Button(pods_logs_frame, text="View Logs", command=show_previous_logs_selected_pod).pack(side=tk.LEFT, padx=5)
+tk.Button(pods_logs_frame, text="Live Logs", command=start_logs_selected_pod).pack(side=tk.LEFT, padx=5)
+tk.Button(pods_logs_frame, text="Stop Logs", command=stop_logs).pack(side=tk.LEFT, padx=5)
+
 # Output
 output_frame = tk.LabelFrame(main_container, text="Output / Messages")
 output_frame.pack(fill="x", padx=10, pady=10)
-namespace_selector_frame.pack(fill="x", padx=10, pady=10)
-output_box = scrolledtext.ScrolledText(output_frame, height=5, wrap="none")
+
+output_box = scrolledtext.ScrolledText(output_frame, height=12, wrap="none")
 output_box.pack(fill="both", padx=5, pady=5)
 
-root.mainloop()
+def on_close():
+    stop_logs()
+    root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", on_close)
