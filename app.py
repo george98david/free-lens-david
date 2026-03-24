@@ -7,324 +7,48 @@ import os
 # -----------------------------
 # Helpers de salida
 # -----------------------------
-def clear_top():
-    top_box.delete("1.0", tk.END)
+def clear_output():
+    output_box.delete("1.0", tk.END)
 
-def clear_main():
-    main_box.delete("1.0", tk.END)
+def write_output(text: str):
+    output_box.delete("1.0", tk.END)
+    output_box.insert(tk.END, text)
 
-def clear_bottom():
-    bottom_box.delete("1.0", tk.END)
-
-def clear_all_outputs():
-    clear_top()
-    clear_main()
-    clear_bottom()
-
-def write_top(text: str):
-    top_box.delete("1.0", tk.END)
-    top_box.insert(tk.END, text)
-
-def write_main(text: str):
-    main_box.delete("1.0", tk.END)
-    main_box.insert(tk.END, text)
-
-def write_bottom(text: str):
-    bottom_box.delete("1.0", tk.END)
-    bottom_box.insert(tk.END, text)
-
-def append_bottom(text: str):
-    bottom_box.insert(tk.END, text)
+def append_output(text: str):
+    output_box.insert(tk.END, text)
 
 
 # -----------------------------
-# Helper para ejecutar kubectl
+# Namespace helpers
 # -----------------------------
-def run_kubectl(cmd: str) -> None:
-    try:
-        namespace = namespace_var.get().strip()
-
-        full_cmd = ["kubectl"] + cmd.split()
-        if namespace:
-            full_cmd += ["-n", namespace]
-
-        result = subprocess.run(
-            full_cmd,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-
-        clear_main()
-        clear_bottom()
-
-        if result.stdout:
-            write_main(result.stdout)
-
-        if result.stderr:
-            write_bottom("\n[stderr]\n" + result.stderr)
-
-        if not result.stdout and not result.stderr:
-            write_bottom("Sin salida.\n")
-
-    except FileNotFoundError:
-        write_bottom("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
-    except Exception as e:
-        write_bottom(f"Error inesperado: {e}\n")
-
-
-# -----------------------------
-# PODS
-# -----------------------------
-def find_matching_pods(search_text: str):
-    namespace = namespace_var.get().strip()
-
-    cmd = ["kubectl", "get", "pods", "-o", "name"]
-    if namespace:
-        cmd += ["-n", namespace]
-
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False
-    )
-
-    if result.returncode != 0:
-        raise Exception(result.stderr if result.stderr else "No se pudieron obtener los pods.")
-
-    pods = []
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("pod/"):
-            line = line.replace("pod/", "", 1)
-        if line:
-            pods.append(line)
-
-    search_text = search_text.lower().strip()
-
-    if not search_text:
-        return pods
-
-    matches = [pod for pod in pods if search_text in pod.lower()]
-    return matches
-
-
-def list_pods() -> None:
-    search_text = entry_pod.get().strip()
-
-    try:
-        matches = find_matching_pods(search_text)
-
-        pod_listbox.delete(0, tk.END)
-        clear_top()
-
-        if not matches:
-            write_top(f"No se encontraron pods con: {search_text}\n")
-            return
-
-        for pod in matches:
-            pod_listbox.insert(tk.END, pod)
-
-        namespace = namespace_var.get().strip() or "(sin namespace)"
-        write_top(f"Se encontraron {len(matches)} pod(s) en namespace '{namespace}'.\n")
-
-    except Exception as e:
-        write_top(f"Error listando pods: {e}\n")
-
-
-def get_selected_pod():
-    selection = pod_listbox.curselection()
-
-    if not selection:
-        write_top("Debes seleccionar un pod de la lista.\n")
-        return None
-
-    return pod_listbox.get(selection[0])
-
-
-def pod_logs() -> None:
-    pod = get_selected_pod()
-    if not pod:
-        return
-
-    namespace = namespace_var.get().strip()
-
-    try:
-        cmd = ["kubectl", "logs", pod]
-        if namespace:
-            cmd += ["-n", namespace]
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-
-        clear_main()
-
-        if result.returncode != 0:
-            write_main(result.stderr if result.stderr else f"No se pudieron obtener logs de {pod}\n")
-            return
-
-        write_main(result.stdout if result.stdout else "Sin logs.\n")
-
-    except Exception as e:
-        write_main(f"Error: {e}\n")
-
-
-def pod_describe() -> None:
-    pod = get_selected_pod()
-    if not pod:
-        return
-
-    namespace = namespace_var.get().strip()
-
-    try:
-        cmd = ["kubectl", "describe", "pod", pod]
-        if namespace:
-            cmd += ["-n", namespace]
-
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-
-        clear_bottom()
-
-        if result.returncode != 0:
-            write_bottom(result.stderr if result.stderr else f"No se pudo describir el pod {pod}\n")
-            return
-
-        write_bottom(result.stdout if result.stdout else "Sin describe.\n")
-
-    except Exception as e:
-        write_bottom(f"Error: {e}\n")
-
-
-def pod_logs_follow() -> None:
-    pod = get_selected_pod()
-    if not pod:
-        return
-
-    namespace = namespace_var.get().strip()
-
-    cmd = ["kubectl", "logs", "-f", pod]
-    if namespace:
-        cmd += ["-n", namespace]
-
-    try:
-        clear_main()
-
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
-
-        current_process["proc"] = process
-        main_box.insert(tk.END, f"Siguiendo logs de {pod}...\n\n")
-
-        def stream_output():
-            proc = current_process["proc"]
-            if proc is None:
-                return
-
-            line = proc.stdout.readline()
-            if line:
-                main_box.insert(tk.END, line)
-                main_box.see(tk.END)
-                root.after(50, stream_output)
-            else:
-                if proc.poll() is None:
-                    root.after(100, stream_output)
-                else:
-                    main_box.insert(tk.END, "\n\nProceso finalizado.\n")
-                    current_process["proc"] = None
-
-        stream_output()
-
-    except FileNotFoundError:
-        write_main("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
-    except Exception as e:
-        write_main(f"Error inesperado: {e}\n")
-
-
-def stop_follow() -> None:
-    proc = current_process["proc"]
-    if proc is not None and proc.poll() is None:
-        proc.terminate()
-        current_process["proc"] = None
-        main_box.insert(tk.END, "\n\nSeguimiento detenido.\n")
-    else:
-        main_box.insert(tk.END, "\nNo hay ningún proceso en seguimiento.\n")
-
-
-# -----------------------------
-# Otras acciones
-# -----------------------------
-def list_deployments() -> None:
-    run_kubectl("get deployments -o wide")
-
-def run_custom() -> None:
-    cmd = entry_custom.get().strip()
-    if not cmd:
-        write_bottom("Ingresa un comando kubectl.\n")
-        return
-    run_kubectl(cmd)
-
-def clear_output() -> None:
-    clear_all_outputs()
-
 def list_namespaces() -> None:
-    run_kubectl("get namespaces")
-
-def get_services() -> None:
-    run_kubectl("get svc -o wide")
-
-def get_nodes() -> None:
     try:
         result = subprocess.run(
-            ["kubectl", "get", "nodes", "-o", "wide"],
+            ["kubectl", "get", "namespaces"],
             capture_output=True,
             text=True,
             check=False
         )
 
-        clear_main()
-        clear_bottom()
+        clear_output()
 
         if result.stdout:
-            write_main(result.stdout)
+            append_output(result.stdout)
 
         if result.stderr:
-            write_bottom("\n[stderr]\n" + result.stderr)
+            append_output("\n[stderr]\n" + result.stderr)
 
         if not result.stdout and not result.stderr:
-            write_bottom("Sin salida.\n")
+            append_output("Sin salida.\n")
 
     except FileNotFoundError:
-        write_bottom("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
+        write_output("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
     except Exception as e:
-        write_bottom(f"Error inesperado: {e}\n")
-
-
-def on_close() -> None:
-    proc = current_process["proc"]
-    if proc is not None and proc.poll() is None:
-        if messagebox.askyesno("Salir", "Hay un proceso de logs en ejecución. ¿Deseas cerrarlo y salir?"):
-            proc.terminate()
-            root.destroy()
-    else:
-        root.destroy()
+        write_output(f"Error inesperado: {e}\n")
 
 
 # -----------------------------
-# ConfigMaps / YAML
+# YAML / ConfigMaps
 # -----------------------------
 def get_selected_yaml_kind() -> str:
     kind = yaml_kind_var.get().strip()
@@ -380,19 +104,19 @@ def list_yaml_resources() -> None:
         matches = find_matching_resources(kind, search_text)
 
         yaml_resource_listbox.delete(0, tk.END)
-        clear_top()
+        clear_output()
 
         if not matches:
-            write_top(f"No se encontraron recursos '{kind}' con: {search_text}\n")
+            write_output(f"No se encontraron recursos '{kind}' con: {search_text}\n")
             return
 
         for item in matches:
             yaml_resource_listbox.insert(tk.END, item)
 
-        write_top(f"Se encontraron {len(matches)} recurso(s) de tipo '{kind}'.\n")
+        write_output(f"Se encontraron {len(matches)} recurso(s) de tipo '{kind}'.\n")
 
     except Exception as e:
-        write_top(f"Error listando recursos YAML: {e}\n")
+        write_output(f"Error listando recursos YAML: {e}\n")
 
 
 yaml_tab_counter = 0
@@ -518,7 +242,7 @@ def load_selected_yaml_resource() -> None:
     selection = yaml_resource_listbox.curselection()
 
     if not selection:
-        write_top("Debes seleccionar un recurso de la lista.\n")
+        write_output("Debes seleccionar un recurso de la lista.\n")
         return
 
     kind = get_selected_yaml_kind()
@@ -537,8 +261,10 @@ def load_selected_yaml_resource() -> None:
             check=False
         )
 
+        clear_output()
+
         if result.returncode != 0:
-            write_bottom(result.stderr if result.stderr else "No se pudo cargar el recurso.\n")
+            write_output(result.stderr if result.stderr else "No se pudo cargar el recurso.\n")
             return
 
         create_yaml_editor_tab(
@@ -548,10 +274,10 @@ def load_selected_yaml_resource() -> None:
             resource_name=resource_name
         )
 
-        write_bottom(f"Recurso '{kind}/{resource_name}' cargado en un nuevo tab.\n")
+        write_output(f"Recurso '{kind}/{resource_name}' cargado en un nuevo tab.\n")
 
     except Exception as e:
-        write_bottom(f"Error cargando YAML: {e}\n")
+        write_output(f"Error cargando YAML: {e}\n")
 
 
 def new_yaml_tab() -> None:
@@ -564,7 +290,7 @@ data:
   ejemplo: "valor"
 """
     create_yaml_editor_tab(title="Nuevo YAML", content=template)
-    write_bottom("Nuevo YAML creado.\n")
+    write_output("Nuevo YAML creado.\n")
 
 
 def open_yaml_file() -> None:
@@ -586,16 +312,16 @@ def open_yaml_file() -> None:
             file_path=file_path
         )
 
-        write_bottom(f"Archivo abierto: {file_path}\n")
+        write_output(f"Archivo abierto: {file_path}\n")
 
     except Exception as e:
-        write_bottom(f"Error abriendo archivo YAML: {e}\n")
+        write_output(f"Error abriendo archivo YAML: {e}\n")
 
 
 def save_current_yaml_tab() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_bottom("No hay ningún tab YAML abierto.\n")
+        write_output("No hay ningún tab YAML abierto.\n")
         return
 
     editor = tab_data["editor"]
@@ -614,16 +340,16 @@ def save_current_yaml_tab() -> None:
         tab_data["dirty"] = False
         yaml_editor_notebook.tab(current, text=tab_data["title"])
 
-        write_bottom(f"Archivo guardado: {file_path}\n")
+        write_output(f"Archivo guardado: {file_path}\n")
 
     except Exception as e:
-        write_bottom(f"Error guardando archivo: {e}\n")
+        write_output(f"Error guardando archivo: {e}\n")
 
 
 def save_current_yaml_tab_as() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_bottom("No hay ningún tab YAML abierto.\n")
+        write_output("No hay ningún tab YAML abierto.\n")
         return
 
     file_path = filedialog.asksaveasfilename(
@@ -649,16 +375,16 @@ def save_current_yaml_tab_as() -> None:
 
         yaml_editor_notebook.tab(current, text=new_title)
 
-        write_bottom(f"Archivo guardado como: {file_path}\n")
+        write_output(f"Archivo guardado como: {file_path}\n")
 
     except Exception as e:
-        write_bottom(f"Error guardando archivo: {e}\n")
+        write_output(f"Error guardando archivo: {e}\n")
 
 
 def close_current_yaml_tab() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_bottom("No hay ningún tab YAML abierto.\n")
+        write_output("No hay ningún tab YAML abierto.\n")
         return
 
     if tab_data["dirty"]:
@@ -677,20 +403,20 @@ def close_current_yaml_tab() -> None:
     yaml_editor_notebook.forget(current)
     yaml_tabs_data.pop(current, None)
 
-    write_bottom("Tab YAML cerrado.\n")
+    write_output("Tab YAML cerrado.\n")
 
 
 def apply_current_yaml_to_cluster() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_bottom("No hay ningún tab YAML abierto.\n")
+        write_output("No hay ningún tab YAML abierto.\n")
         return
 
     editor = tab_data["editor"]
     yaml_content = editor.get("1.0", tk.END).strip()
 
     if not yaml_content:
-        write_bottom("El editor YAML está vacío.\n")
+        write_output("El editor YAML está vacío.\n")
         return
 
     confirm = messagebox.askyesno(
@@ -709,34 +435,34 @@ def apply_current_yaml_to_cluster() -> None:
             check=False
         )
 
-        clear_bottom()
+        clear_output()
 
         if result.stdout:
-            append_bottom(result.stdout + "\n")
+            append_output(result.stdout + "\n")
 
         if result.stderr:
-            append_bottom(result.stderr + "\n")
+            append_output(result.stderr + "\n")
 
         if result.returncode == 0:
-            append_bottom("YAML aplicado correctamente.\n")
+            append_output("YAML aplicado correctamente.\n")
         else:
-            append_bottom("Hubo un error al aplicar el YAML.\n")
+            append_output("Hubo un error al aplicar el YAML.\n")
 
     except Exception as e:
-        write_bottom(f"Error aplicando YAML: {e}\n")
+        write_output(f"Error aplicando YAML: {e}\n")
 
 
 def reload_current_yaml_from_cluster() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_bottom("No hay ningún tab YAML abierto.\n")
+        write_output("No hay ningún tab YAML abierto.\n")
         return
 
     kind = tab_data.get("resource_kind")
     name = tab_data.get("resource_name")
 
     if not kind or not name:
-        write_bottom("Este tab no viene de un recurso del cluster.\n")
+        write_output("Este tab no viene de un recurso del cluster.\n")
         return
 
     namespace = namespace_var.get().strip()
@@ -752,8 +478,10 @@ def reload_current_yaml_from_cluster() -> None:
             check=False
         )
 
+        clear_output()
+
         if result.returncode != 0:
-            write_bottom(result.stderr if result.stderr else "No se pudo recargar el recurso.\n")
+            write_output(result.stderr if result.stderr else "No se pudo recargar el recurso.\n")
             return
 
         editor = tab_data["editor"]
@@ -764,96 +492,40 @@ def reload_current_yaml_from_cluster() -> None:
         yaml_editor_notebook.tab(current, text=tab_data["title"])
         apply_yaml_highlighting(editor)
 
-        write_bottom(f"Recurso '{kind}/{name}' recargado desde el cluster.\n")
+        write_output(f"Recurso '{kind}/{name}' recargado desde el cluster.\n")
 
     except Exception as e:
-        write_bottom(f"Error recargando YAML: {e}\n")
+        write_output(f"Error recargando YAML: {e}\n")
 
 
 # -----------------------------
-# UI Setup
+# UI
 # -----------------------------
 root = tk.Tk()
-root.title("Mini Kubernetes UI - Avanzado")
+root.title("Mini Kubernetes UI - YAML Studio")
 root.geometry("1000x700")
-
-current_process = {"proc": None}
 
 # Namespace frame
 namespace_frame = tk.Frame(root)
-namespace_frame.pack(pady=5)
+namespace_frame.pack(fill="x", pady=5)
 
-tk.Label(namespace_frame, text="Namespace: ").pack(side=tk.LEFT)
+tk.Label(namespace_frame, text="Namespace: ").pack(side=tk.LEFT, padx=5)
 
-namespace_var = tk.StringVar()
-namespace_entry = tk.Entry(namespace_frame, textvariable=namespace_var, width=20)
+namespace_var = tk.StringVar(value="slfsvc-twa07")
+namespace_entry = tk.Entry(namespace_frame, textvariable=namespace_var, width=25)
 namespace_entry.pack(side=tk.LEFT, padx=5)
-namespace_var.set("slfsvc-twa07")
 
 tk.Button(namespace_frame, text="Listar Namespaces", command=list_namespaces).pack(side=tk.LEFT, padx=5)
-tk.Button(namespace_frame, text="Ver Services", command=get_services).pack(side=tk.LEFT, padx=5)
-tk.Button(namespace_frame, text="Ver Nodes", command=get_nodes).pack(side=tk.LEFT, padx=5)
 tk.Button(namespace_frame, text="Limpiar salida", command=clear_output).pack(side=tk.LEFT, padx=5)
 
 # Tabs
 tabs = ttk.Notebook(root)
-tab_pods = ttk.Frame(tabs)
-tab_deploy = ttk.Frame(tabs)
-tab_custom = ttk.Frame(tabs)
 tab_yaml = ttk.Frame(tabs)
 
-tabs.add(tab_pods, text="Pods")
-tabs.add(tab_deploy, text="Deployments")
-tabs.add(tab_custom, text="Comandos")
-tabs.add(tab_yaml, text="YAML Studio")
+tabs.add(tab_yaml, text="ConfigMaps / YAML Studio")
 tabs.pack(expand=1, fill="both", padx=10, pady=10)
 
-# -----------------------------
-# PODS TAB
-# -----------------------------
-pods_top_frame = tk.Frame(tab_pods)
-pods_top_frame.pack(fill="x", padx=10, pady=10)
-
-tk.Label(pods_top_frame, text="Buscar pod:").pack(side=tk.LEFT, padx=5)
-
-entry_pod = tk.Entry(pods_top_frame, width=40)
-entry_pod.pack(side=tk.LEFT, padx=5)
-
-tk.Button(pods_top_frame, text="Listar Pods", command=list_pods).pack(side=tk.LEFT, padx=5)
-tk.Button(pods_top_frame, text="Ver Logs", command=pod_logs).pack(side=tk.LEFT, padx=5)
-tk.Button(pods_top_frame, text="Seguir Logs (-f)", command=pod_logs_follow).pack(side=tk.LEFT, padx=5)
-tk.Button(pods_top_frame, text="Detener Logs", command=stop_follow).pack(side=tk.LEFT, padx=5)
-tk.Button(pods_top_frame, text="Describe Pod", command=pod_describe).pack(side=tk.LEFT, padx=5)
-
-pods_middle_frame = tk.Frame(tab_pods)
-pods_middle_frame.pack(fill="x", padx=10, pady=5)
-
-tk.Label(pods_middle_frame, text="Coincidencias:").pack(anchor="w")
-
-pod_listbox = tk.Listbox(pods_middle_frame, height=8)
-pod_listbox.pack(fill="x", pady=5)
-
-# doble click = logs
-pod_listbox.bind("<Double-Button-1>", lambda event: pod_logs())
-
-# -----------------------------
-# DEPLOYMENTS TAB
-# -----------------------------
-tk.Button(tab_deploy, text="Listar Deployments", command=list_deployments).pack(pady=10)
-
-# -----------------------------
-# CUSTOM COMMANDS TAB
-# -----------------------------
-tk.Label(tab_custom, text="kubectl <comando> (sin escribir 'kubectl'):").pack(pady=5)
-
-entry_custom = tk.Entry(tab_custom, width=70)
-entry_custom.pack(pady=5)
-
-tk.Button(tab_custom, text="Ejecutar", command=run_custom).pack(pady=5)
-
-# -----------------------------
-# YAML STUDIO TAB
-# -----------------------------
+# Top controls
 yaml_top_frame = tk.Frame(tab_yaml)
 yaml_top_frame.pack(fill="x", padx=5, pady=5)
 
@@ -887,6 +559,7 @@ entry_yaml_search.pack(side=tk.LEFT, padx=5)
 tk.Button(yaml_top_frame, text="Listar", command=list_yaml_resources).pack(side=tk.LEFT, padx=5)
 tk.Button(yaml_top_frame, text="Abrir seleccionado", command=load_selected_yaml_resource).pack(side=tk.LEFT, padx=5)
 
+# Listbox
 yaml_middle_frame = tk.Frame(tab_yaml)
 yaml_middle_frame.pack(fill="x", padx=5, pady=5)
 
@@ -896,6 +569,7 @@ yaml_resource_listbox = tk.Listbox(yaml_middle_frame, height=6)
 yaml_resource_listbox.pack(fill="x", pady=5)
 yaml_resource_listbox.bind("<Double-Button-1>", lambda event: load_selected_yaml_resource())
 
+# Actions
 yaml_actions_frame = tk.Frame(tab_yaml)
 yaml_actions_frame.pack(fill="x", padx=5, pady=5)
 
@@ -907,32 +581,15 @@ tk.Button(yaml_actions_frame, text="Aplicar al cluster", command=apply_current_y
 tk.Button(yaml_actions_frame, text="Recargar desde cluster", command=reload_current_yaml_from_cluster).pack(side=tk.LEFT, padx=5)
 tk.Button(yaml_actions_frame, text="Cerrar tab", command=close_current_yaml_tab).pack(side=tk.LEFT, padx=5)
 
+# Editor notebook
 yaml_editor_notebook = ttk.Notebook(tab_yaml)
 yaml_editor_notebook.pack(fill="both", expand=True, padx=5, pady=5)
 
-# -----------------------------
-# OUTPUT AREAS
-# -----------------------------
-output_container = tk.Frame(root)
-output_container.pack(padx=10, pady=10, fill="both", expand=True)
+# Output
+output_frame = tk.LabelFrame(root, text="Salida / Mensajes")
+output_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-top_frame = tk.LabelFrame(output_container, text="Listas / Resultados")
-top_frame.pack(fill="both", expand=True, pady=4)
+output_box = scrolledtext.ScrolledText(output_frame, width=120, height=10, wrap="none")
+output_box.pack(fill="both", expand=True, padx=5, pady=5)
 
-top_box = scrolledtext.ScrolledText(top_frame, width=120, height=10, wrap="none")
-top_box.pack(fill="both", expand=True, padx=5, pady=5)
-
-main_frame = tk.LabelFrame(output_container, text="Logs / Contenido principal")
-main_frame.pack(fill="both", expand=True, pady=4)
-
-main_box = scrolledtext.ScrolledText(main_frame, width=120, height=14, wrap="none")
-main_box.pack(fill="both", expand=True, padx=5, pady=5)
-
-bottom_frame = tk.LabelFrame(output_container, text="Describe / Mensajes")
-bottom_frame.pack(fill="both", expand=True, pady=4)
-
-bottom_box = scrolledtext.ScrolledText(bottom_frame, width=120, height=8, wrap="none")
-bottom_box.pack(fill="both", expand=True, padx=5, pady=5)
-
-root.protocol("WM_DELETE_WINDOW", on_close)
 root.mainloop()
