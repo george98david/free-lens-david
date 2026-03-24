@@ -596,7 +596,7 @@ root.state("zoomed")  # pantalla completa en Windows / la mayoría
 # -----------------------------
 # CONTENEDOR PRINCIPAL CON SCROLL
 # -----------------------------
-main_canvas = tk.Canvas(root)
+main_canvas = tk.Canvas(root, highlightthickness=0, bd=0)
 main_scrollbar = tk.Scrollbar(root, orient="vertical", command=main_canvas.yview)
 
 main_canvas.configure(yscrollcommand=main_scrollbar.set)
@@ -605,12 +605,16 @@ main_scrollbar.pack(side="right", fill="y")
 main_canvas.pack(side="left", fill="both", expand=True)
 
 main_container = tk.Frame(main_canvas)
-main_canvas.create_window((0, 0), window=main_container, anchor="nw")
+canvas_window = main_canvas.create_window((0, 0), window=main_container, anchor="nw")
 
 def update_scrollregion(event=None):
     main_canvas.configure(scrollregion=main_canvas.bbox("all"))
 
+def resize_canvas_content(event):
+    main_canvas.itemconfig(canvas_window, width=event.width)
+
 main_container.bind("<Configure>", update_scrollregion)
+main_canvas.bind("<Configure>", resize_canvas_content)
 
 def on_mousewheel(event):
     main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -631,13 +635,13 @@ namespace_search_row.pack(fill="x", padx=5, pady=5)
 
 tk.Label(namespace_search_row, text="Buscar namespace:").pack(side=tk.LEFT, padx=5)
 
-entry_namespace_search = tk.Entry(namespace_search_row, width=35)
+entry_namespace_search = tk.Entry(namespace_search_row, width=60)
 entry_namespace_search.pack(side=tk.LEFT, padx=5)
 
 tk.Button(namespace_search_row, text="Listar Namespaces", command=list_namespaces).pack(side=tk.LEFT, padx=5)
 tk.Button(namespace_search_row, text="Continuar", command=continue_with_namespace).pack(side=tk.LEFT, padx=5)
 
-namespace_current_label = tk.Label(namespace_search_row, textvariable=namespace_var, relief="sunken", width=30, anchor="w")
+namespace_current_label = tk.Label(namespace_search_row, textvariable=namespace_var, relief="sunken", width=50, anchor="w")
 namespace_current_label.pack(side=tk.RIGHT, padx=5)
 
 tk.Label(namespace_search_row, text="Namespace activo:").pack(side=tk.RIGHT, padx=5)
@@ -647,7 +651,7 @@ namespace_list_frame.pack(fill="x", padx=5, pady=5)
 
 tk.Label(namespace_list_frame, text="Coincidencias:").pack(anchor="w")
 
-namespace_listbox = tk.Listbox(namespace_list_frame, height=3)
+namespace_listbox = tk.Listbox(namespace_list_frame, height=4)
 namespace_listbox.pack(fill="x", pady=5)
 
 # ---------------------------------
@@ -687,7 +691,7 @@ yaml_kind_combo.pack(side=tk.LEFT, padx=5)
 
 tk.Label(yaml_top_frame, text="Buscar:").pack(side=tk.LEFT, padx=5)
 
-entry_yaml_search = tk.Entry(yaml_top_frame, width=30)
+entry_yaml_search = tk.Entry(yaml_top_frame, width=60)
 entry_yaml_search.pack(side=tk.LEFT, padx=5)
 
 tk.Button(yaml_top_frame, text="Listar", command=list_yaml_resources).pack(side=tk.LEFT, padx=5)
@@ -700,7 +704,7 @@ yaml_middle_frame.pack(fill="x", padx=5, pady=5)
 tk.Label(yaml_middle_frame, text="Coincidencias:").pack(anchor="w")
 
 yaml_resource_listbox = tk.Listbox(yaml_middle_frame, height=4)
-yaml_resource_listbox.pack(fill="x", pady=5)
+yaml_resource_listbox.pack(fill="both", expand=True, pady=5)
 yaml_resource_listbox.bind("<Double-Button-1>", lambda event: load_selected_yaml_resource())
 
 # Actions
@@ -723,7 +727,7 @@ yaml_editor_notebook.pack(fill="both", padx=5, pady=5)
 output_frame = tk.LabelFrame(main_container, text="Salida / Mensajes")
 output_frame.pack(fill="x", padx=10, pady=10)
 namespace_selector_frame.pack(fill="x", padx=10, pady=10)
-output_box = scrolledtext.ScrolledText(output_frame, width=120, height=7, wrap="none")
+output_box = scrolledtext.ScrolledText(output_frame, height=5, wrap="none")
 output_box.pack(fill="both", padx=5, pady=5)
 
 root.mainloop()
