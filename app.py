@@ -979,8 +979,8 @@ def on_mousewheel(event):
     # Listbox
     if isinstance(widget, tk.Listbox):
     try:
-        direction = -1 if event.delta > 0 else 1
-        widget.yview_scroll(direction, "units")
+        steps = int(event.delta / 120)  # normaliza a ±1, ±2, etc.
+        widget.yview_scroll(-steps, "units")
         return "break"
     except Exception:
         pass
@@ -1208,7 +1208,7 @@ def on_close():
 
 root.protocol("WM_DELETE_WINDOW", on_close)
 
-refresh_pod_status_filters()
+#refresh_pod_status_filters()
 #list_pods()
 
 root.mainloop()
