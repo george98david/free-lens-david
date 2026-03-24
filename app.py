@@ -960,7 +960,7 @@ main_canvas.bind("<Configure>", resize_canvas_content)
 def on_mousewheel(event):
     widget = event.widget
 
-    # Si estás dentro de un ScrolledText o Text → scrollea ese widget
+    # Text / ScrolledText
     if isinstance(widget, (tk.Text, scrolledtext.ScrolledText)):
         try:
             widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -968,7 +968,7 @@ def on_mousewheel(event):
         except Exception:
             pass
 
-    # Si estás dentro del Treeview (lista de pods)
+    # Treeview
     if isinstance(widget, ttk.Treeview):
         try:
             widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -976,7 +976,15 @@ def on_mousewheel(event):
         except Exception:
             pass
 
-    # Si no, scrollea la ventana principal
+    # Listbox
+    if isinstance(widget, tk.Listbox):
+        try:
+            widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            return "break"
+        except Exception:
+            pass
+
+    # Fallback: main window
     main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
 root.bind_all("<MouseWheel>", on_mousewheel)
