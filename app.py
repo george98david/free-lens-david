@@ -5,6 +5,13 @@ import os
 
 
 # -----------------------------
+# Estado global YAML
+# -----------------------------
+yaml_tab_counter = 0
+yaml_tabs_data = {}
+
+
+# -----------------------------
 # Helpers de salida
 # -----------------------------
 def clear_output():
@@ -19,32 +26,104 @@ def append_output(text: str):
 
 
 # -----------------------------
+# Reset general inferior
+# -----------------------------
+def reset_yaml_area():
+    global yaml_tab_counter, yaml_tabs_data
+
+    # limpiar búsqueda y lista de recursos
+    entry_yaml_search.delete(0, tk.END)
+    yaml_resource_listbox.delete(0, tk.END)
+
+    # cerrar todos los tabs del editor YAML
+    for tab_id in yaml_editor_notebook.tabs():
+        yaml_editor_notebook.forget(tab_id)
+
+    yaml_tabs_data = {}
+    yaml_tab_counter = 0
+
+    clear_output()
+
+
+# -----------------------------
 # Namespace helpers
 # -----------------------------
+def get_all_namespaces():
+    result = subprocess.run(
+        ["kubectl", "get", "namespaces", "-o", "name"],
+        capture_output=True,
+        text=True,
+        check=False
+    )
+
+    if result.returncode != 0:
+        raise Exception(result.stderr if result.stderr else "No se pudieron obtener los namespaces.")
+
+    items = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        if line.startswith("namespace/"):
+            line = line.replace("namespace/", "", 1)
+
+        items.append(line)
+
+    return items
+
+
+def find_matching_namespaces(search_text: str):
+    items = get_all_namespaces()
+    search_text = search_text.strip().lower()
+
+    if not search_text:
+        return items
+
+    return [item for item in items if search_text in item.lower()]
+
+
 def list_namespaces() -> None:
+    search_text = entry_namespace_search.get().strip()
+
     try:
-        result = subprocess.run(
-            ["kubectl", "get", "namespaces"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
+        matches = find_matching_namespaces(search_text)
 
-        clear_output()
+        namespace_listbox.delete(0, tk.END)
+        namespace_status_box.delete("1.0", tk.END)
 
-        if result.stdout:
-            append_output(result.stdout)
+        if not matches:
+            namespace_status_box.insert(tk.END, f"No se encontraron namespaces con: {search_text}\n")
+            return
 
-        if result.stderr:
-            append_output("\n[stderr]\n" + result.stderr)
+        for item in matches:
+            namespace_listbox.insert(tk.END, item)
 
-        if not result.stdout and not result.stderr:
-            append_output("Sin salida.\n")
+        namespace_status_box.insert(tk.END, f"Se encontraron {len(matches)} namespace(s).\n")
 
     except FileNotFoundError:
-        write_output("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
+        namespace_status_box.delete("1.0", tk.END)
+        namespace_status_box.insert(tk.END, "Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
     except Exception as e:
-        write_output(f"Error inesperado: {e}\n")
+        namespace_status_box.delete("1.0", tk.END)
+        namespace_status_box.insert(tk.END, f"Error listando namespaces: {e}\n")
+
+
+def continue_with_namespace() -> None:
+    selection = namespace_listbox.curselection()
+
+    if not selection:
+        namespace_status_box.delete("1.0", tk.END)
+        namespace_status_box.insert(tk.END, "Debes seleccionar un namespace.\n")
+        return
+
+    selected_namespace = namespace_listbox.get(selection[0])
+    namespace_var.set(selected_namespace)
+
+    # Limpiar todo lo de abajo
+    reset_yaml_area()
+
+    write_output(f"Namespace activo: {selected_namespace}\n")
 
 
 # -----------------------------
@@ -113,14 +192,13 @@ def list_yaml_resources() -> None:
         for item in matches:
             yaml_resource_listbox.insert(tk.END, item)
 
-        write_output(f"Se encontraron {len(matches)} recurso(s) de tipo '{kind}'.\n")
+        write_output(
+            f"Namespace activo: {namespace_var.get().strip() or '(sin namespace)'}\n"
+            f"Se encontraron {len(matches)} recurso(s) de tipo '{kind}'.\n"
+        )
 
     except Exception as e:
         write_output(f"Error listando recursos YAML: {e}\n")
-
-
-yaml_tab_counter = 0
-yaml_tabs_data = {}
 
 
 def create_yaml_editor_tab(title="Nuevo YAML", content="", file_path=None, resource_kind=None, resource_name=None):
@@ -141,6 +219,10 @@ def create_yaml_editor_tab(title="Nuevo YAML", content="", file_path=None, resou
     x_scroll = tk.Scrollbar(frame, orient="horizontal", command=editor.xview)
     x_scroll.pack(side="bottom", fill="x")
     editor.configure(xscrollcommand=x_scroll.set)
+
+    if not title:
+        yaml_tab_counter += 1
+        title = f"YAML {yaml_tab_counter}"
 
     yaml_editor_notebook.add(frame, text=title)
     yaml_editor_notebook.select(frame)
@@ -170,7 +252,6 @@ def create_yaml_editor_tab(title="Nuevo YAML", content="", file_path=None, resou
     editor.edit_modified(False)
     editor.bind("<<Modified>>", on_modified)
 
-    yaml_tab_counter += 1
     apply_yaml_highlighting(editor)
     return frame
 
@@ -281,6 +362,9 @@ def load_selected_yaml_resource() -> None:
 
 
 def new_yaml_tab() -> None:
+    global yaml_tab_counter
+    yaml_tab_counter += 1
+
     template = """apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -289,11 +373,13 @@ metadata:
 data:
   ejemplo: "valor"
 """
-    create_yaml_editor_tab(title="Nuevo YAML", content=template)
+    create_yaml_editor_tab(title=f"Nuevo YAML {yaml_tab_counter}", content=template)
     write_output("Nuevo YAML creado.\n")
 
 
 def open_yaml_file() -> None:
+    global yaml_tab_counter
+
     file_path = filedialog.askopenfilename(
         title="Abrir archivo YAML",
         filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
@@ -305,6 +391,8 @@ def open_yaml_file() -> None:
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
+
+        yaml_tab_counter += 1
 
         create_yaml_editor_tab(
             title=os.path.basename(file_path),
@@ -503,22 +591,50 @@ def reload_current_yaml_from_cluster() -> None:
 # -----------------------------
 root = tk.Tk()
 root.title("Mini Kubernetes UI - YAML Studio")
-root.geometry("1000x700")
+root.geometry("1100x760")
 
-# Namespace frame
-namespace_frame = tk.Frame(root)
-namespace_frame.pack(fill="x", pady=5)
+# Namespace activo oculto / lógico
+namespace_var = tk.StringVar(value="")
 
-tk.Label(namespace_frame, text="Namespace: ").pack(side=tk.LEFT, padx=5)
+# ---------------------------------
+# Selector de Namespace (nuevo)
+# ---------------------------------
+namespace_selector_frame = tk.LabelFrame(root, text="Selector de Namespace")
+namespace_selector_frame.pack(fill="x", padx=10, pady=10)
 
-namespace_var = tk.StringVar(value="slfsvc-twa07")
-namespace_entry = tk.Entry(namespace_frame, textvariable=namespace_var, width=25)
-namespace_entry.pack(side=tk.LEFT, padx=5)
+namespace_search_row = tk.Frame(namespace_selector_frame)
+namespace_search_row.pack(fill="x", padx=5, pady=5)
 
-tk.Button(namespace_frame, text="Listar Namespaces", command=list_namespaces).pack(side=tk.LEFT, padx=5)
-tk.Button(namespace_frame, text="Limpiar salida", command=clear_output).pack(side=tk.LEFT, padx=5)
+tk.Label(namespace_search_row, text="Buscar namespace:").pack(side=tk.LEFT, padx=5)
 
+entry_namespace_search = tk.Entry(namespace_search_row, width=35)
+entry_namespace_search.pack(side=tk.LEFT, padx=5)
+
+tk.Button(namespace_search_row, text="Listar Namespaces", command=list_namespaces).pack(side=tk.LEFT, padx=5)
+tk.Button(namespace_search_row, text="Continuar", command=continue_with_namespace).pack(side=tk.LEFT, padx=5)
+
+namespace_current_label = tk.Label(namespace_search_row, textvariable=namespace_var, relief="sunken", width=30, anchor="w")
+namespace_current_label.pack(side=tk.RIGHT, padx=5)
+
+tk.Label(namespace_search_row, text="Namespace activo:").pack(side=tk.RIGHT, padx=5)
+
+namespace_list_frame = tk.Frame(namespace_selector_frame)
+namespace_list_frame.pack(fill="x", padx=5, pady=5)
+
+tk.Label(namespace_list_frame, text="Coincidencias:").pack(anchor="w")
+
+namespace_listbox = tk.Listbox(namespace_list_frame, height=6)
+namespace_listbox.pack(fill="x", pady=5)
+
+namespace_status_frame = tk.Frame(namespace_selector_frame)
+namespace_status_frame.pack(fill="x", padx=5, pady=5)
+
+namespace_status_box = scrolledtext.ScrolledText(namespace_status_frame, width=120, height=4, wrap="none")
+namespace_status_box.pack(fill="both", expand=True)
+
+# ---------------------------------
 # Tabs
+# ---------------------------------
 tabs = ttk.Notebook(root)
 tab_yaml = ttk.Frame(tabs)
 
