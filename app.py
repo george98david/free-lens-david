@@ -5,14 +5,14 @@ import os
 
 
 # -----------------------------
-# Estado global YAML
+# Global YAML state
 # -----------------------------
 yaml_tab_counter = 0
 yaml_tabs_data = {}
 
 
 # -----------------------------
-# Helpers de salida
+# Output helpers
 # -----------------------------
 def clear_output():
     output_box.delete("1.0", tk.END)
@@ -26,16 +26,16 @@ def append_output(text: str):
 
 
 # -----------------------------
-# Reset general inferior
+# General lower section reset
 # -----------------------------
 def reset_yaml_area():
     global yaml_tab_counter, yaml_tabs_data
 
-    # limpiar búsqueda y lista de recursos
+    # Clear search and resource list
     entry_yaml_search.delete(0, tk.END)
     yaml_resource_listbox.delete(0, tk.END)
 
-    # cerrar todos los tabs del editor YAML
+    # Close all YAML editor tabs
     for tab_id in yaml_editor_notebook.tabs():
         yaml_editor_notebook.forget(tab_id)
 
@@ -57,7 +57,7 @@ def get_all_namespaces():
     )
 
     if result.returncode != 0:
-        raise Exception(result.stderr if result.stderr else "No se pudieron obtener los namespaces.")
+        raise Exception(result.stderr if result.stderr else "Could not retrieve namespaces.")
 
     items = []
     for line in result.stdout.splitlines():
@@ -93,20 +93,20 @@ def list_namespaces() -> None:
         clear_output()
 
         if not matches:
-            write_output(f"No se encontraron namespaces con: {search_text}\n")
+            write_output(f"No namespaces found matching: {search_text}\n")
             return
 
         for item in matches:
             namespace_listbox.insert(tk.END, item)
 
-        write_output(f"Se encontraron {len(matches)} namespace(s).\n")
+        write_output(f"Found {len(matches)} namespace(s).\n")
 
     except FileNotFoundError:
         clear_output()
-        write_output("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
+        write_output("Error: 'kubectl' was not found. Make sure it is installed and available in PATH.\n")
     except Exception as e:
         clear_output()
-        write_output(f"Error listando namespaces: {e}\n")
+        write_output(f"Error listing namespaces: {e}\n")
 
 
 def continue_with_namespace() -> None:
@@ -114,16 +114,16 @@ def continue_with_namespace() -> None:
 
     if not selection:
         clear_output()
-        write_output("Debes seleccionar un namespace.\n")
+        write_output("You must select a namespace.\n")
         return
 
     selected_namespace = namespace_listbox.get(selection[0])
     namespace_var.set(selected_namespace)
 
-    # Limpiar todo lo de abajo
+    # Clear everything below
     reset_yaml_area()
 
-    write_output(f"Namespace activo: {selected_namespace}\n")
+    write_output(f"Active namespace: {selected_namespace}\n")
 
 
 # -----------------------------
@@ -151,7 +151,7 @@ def find_matching_resources(kind: str, search_text: str):
     )
 
     if result.returncode != 0:
-        raise Exception(result.stderr if result.stderr else f"No se pudieron obtener recursos de tipo {kind}.")
+        raise Exception(result.stderr if result.stderr else f"Could not retrieve resources of type {kind}.")
 
     items = []
 
@@ -186,22 +186,22 @@ def list_yaml_resources() -> None:
         clear_output()
 
         if not matches:
-            write_output(f"No se encontraron recursos '{kind}' con: {search_text}\n")
+            write_output(f"No '{kind}' resources found matching: {search_text}\n")
             return
 
         for item in matches:
             yaml_resource_listbox.insert(tk.END, item)
 
         write_output(
-            f"Namespace activo: {namespace_var.get().strip() or '(sin namespace)'}\n"
-            f"Se encontraron {len(matches)} recurso(s) de tipo '{kind}'.\n"
+            f"Active namespace: {namespace_var.get().strip() or '(no namespace)'}\n"
+            f"Found {len(matches)} resource(s) of type '{kind}'.\n"
         )
 
     except Exception as e:
-        write_output(f"Error listando recursos YAML: {e}\n")
+        write_output(f"Error listing YAML resources: {e}\n")
 
 
-def create_yaml_editor_tab(title="Nuevo YAML", content="", file_path=None, resource_kind=None, resource_name=None):
+def create_yaml_editor_tab(title="New YAML", content="", file_path=None, resource_kind=None, resource_name=None):
     global yaml_tab_counter
 
     frame = ttk.Frame(yaml_editor_notebook)
@@ -323,7 +323,7 @@ def load_selected_yaml_resource() -> None:
     selection = yaml_resource_listbox.curselection()
 
     if not selection:
-        write_output("Debes seleccionar un recurso de la lista.\n")
+        write_output("You must select a resource from the list.\n")
         return
 
     kind = get_selected_yaml_kind()
@@ -345,7 +345,7 @@ def load_selected_yaml_resource() -> None:
         clear_output()
 
         if result.returncode != 0:
-            write_output(result.stderr if result.stderr else "No se pudo cargar el recurso.\n")
+            write_output(result.stderr if result.stderr else "Could not load the resource.\n")
             return
 
         create_yaml_editor_tab(
@@ -355,10 +355,10 @@ def load_selected_yaml_resource() -> None:
             resource_name=resource_name
         )
 
-        write_output(f"Recurso '{kind}/{resource_name}' cargado en un nuevo tab.\n")
+        write_output(f"Resource '{kind}/{resource_name}' loaded into a new tab.\n")
 
     except Exception as e:
-        write_output(f"Error cargando YAML: {e}\n")
+        write_output(f"Error loading YAML: {e}\n")
 
 
 def new_yaml_tab() -> None:
@@ -368,20 +368,20 @@ def new_yaml_tab() -> None:
     template = """apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: nuevo-configmap
+  name: new-configmap
   namespace: default
 data:
-  ejemplo: "valor"
+  example: "value"
 """
-    create_yaml_editor_tab(title=f"Nuevo YAML {yaml_tab_counter}", content=template)
-    write_output("Nuevo YAML creado.\n")
+    create_yaml_editor_tab(title=f"New YAML {yaml_tab_counter}", content=template)
+    write_output("New YAML created.\n")
 
 
 def open_yaml_file() -> None:
     global yaml_tab_counter
 
     file_path = filedialog.askopenfilename(
-        title="Abrir archivo YAML",
+        title="Open YAML file",
         filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
     )
 
@@ -400,16 +400,16 @@ def open_yaml_file() -> None:
             file_path=file_path
         )
 
-        write_output(f"Archivo abierto: {file_path}\n")
+        write_output(f"File opened: {file_path}\n")
 
     except Exception as e:
-        write_output(f"Error abriendo archivo YAML: {e}\n")
+        write_output(f"Error opening YAML file: {e}\n")
 
 
 def save_current_yaml_tab() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_output("No hay ningún tab YAML abierto.\n")
+        write_output("There is no open YAML tab.\n")
         return
 
     editor = tab_data["editor"]
@@ -428,20 +428,20 @@ def save_current_yaml_tab() -> None:
         tab_data["dirty"] = False
         yaml_editor_notebook.tab(current, text=tab_data["title"])
 
-        write_output(f"Archivo guardado: {file_path}\n")
+        write_output(f"File saved: {file_path}\n")
 
     except Exception as e:
-        write_output(f"Error guardando archivo: {e}\n")
+        write_output(f"Error saving file: {e}\n")
 
 
 def save_current_yaml_tab_as() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_output("No hay ningún tab YAML abierto.\n")
+        write_output("There is no open YAML tab.\n")
         return
 
     file_path = filedialog.asksaveasfilename(
-        title="Guardar YAML como",
+        title="Save YAML as",
         defaultextension=".yaml",
         filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
     )
@@ -463,22 +463,22 @@ def save_current_yaml_tab_as() -> None:
 
         yaml_editor_notebook.tab(current, text=new_title)
 
-        write_output(f"Archivo guardado como: {file_path}\n")
+        write_output(f"File saved as: {file_path}\n")
 
     except Exception as e:
-        write_output(f"Error guardando archivo: {e}\n")
+        write_output(f"Error saving file: {e}\n")
 
 
 def close_current_yaml_tab() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_output("No hay ningún tab YAML abierto.\n")
+        write_output("There is no open YAML tab.\n")
         return
 
     if tab_data["dirty"]:
         confirm = messagebox.askyesnocancel(
-            "Cerrar tab",
-            "Este YAML tiene cambios sin guardar. ¿Quieres guardarlo antes de cerrar?"
+            "Close tab",
+            "This YAML has unsaved changes. Do you want to save before closing?"
         )
         if confirm is None:
             return
@@ -491,25 +491,25 @@ def close_current_yaml_tab() -> None:
     yaml_editor_notebook.forget(current)
     yaml_tabs_data.pop(current, None)
 
-    write_output("Tab YAML cerrado.\n")
+    write_output("YAML tab closed.\n")
 
 
 def apply_current_yaml_to_cluster() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_output("No hay ningún tab YAML abierto.\n")
+        write_output("There is no open YAML tab.\n")
         return
 
     editor = tab_data["editor"]
     yaml_content = editor.get("1.0", tk.END).strip()
 
     if not yaml_content:
-        write_output("El editor YAML está vacío.\n")
+        write_output("The YAML editor is empty.\n")
         return
 
     confirm = messagebox.askyesno(
-        "Aplicar YAML",
-        "¿Seguro que quieres aplicar este YAML al cluster?"
+        "Apply YAML",
+        "Are you sure you want to apply this YAML to the cluster?"
     )
     if not confirm:
         return
@@ -532,25 +532,25 @@ def apply_current_yaml_to_cluster() -> None:
             append_output(result.stderr + "\n")
 
         if result.returncode == 0:
-            append_output("YAML aplicado correctamente.\n")
+            append_output("YAML applied successfully.\n")
         else:
-            append_output("Hubo un error al aplicar el YAML.\n")
+            append_output("There was an error applying the YAML.\n")
 
     except Exception as e:
-        write_output(f"Error aplicando YAML: {e}\n")
+        write_output(f"Error applying YAML: {e}\n")
 
 
 def reload_current_yaml_from_cluster() -> None:
     current, tab_data = get_current_yaml_tab()
     if not current or not tab_data:
-        write_output("No hay ningún tab YAML abierto.\n")
+        write_output("There is no open YAML tab.\n")
         return
 
     kind = tab_data.get("resource_kind")
     name = tab_data.get("resource_name")
 
     if not kind or not name:
-        write_output("Este tab no viene de un recurso del cluster.\n")
+        write_output("This tab does not come from a cluster resource.\n")
         return
 
     namespace = namespace_var.get().strip()
@@ -569,7 +569,7 @@ def reload_current_yaml_from_cluster() -> None:
         clear_output()
 
         if result.returncode != 0:
-            write_output(result.stderr if result.stderr else "No se pudo recargar el recurso.\n")
+            write_output(result.stderr if result.stderr else "Could not reload the resource.\n")
             return
 
         editor = tab_data["editor"]
@@ -580,10 +580,10 @@ def reload_current_yaml_from_cluster() -> None:
         yaml_editor_notebook.tab(current, text=tab_data["title"])
         apply_yaml_highlighting(editor)
 
-        write_output(f"Recurso '{kind}/{name}' recargado desde el cluster.\n")
+        write_output(f"Resource '{kind}/{name}' reloaded from the cluster.\n")
 
     except Exception as e:
-        write_output(f"Error recargando YAML: {e}\n")
+        write_output(f"Error reloading YAML: {e}\n")
 
 
 # -----------------------------
@@ -591,10 +591,10 @@ def reload_current_yaml_from_cluster() -> None:
 # -----------------------------
 root = tk.Tk()
 root.title("Mini Kubernetes UI - YAML Studio")
-root.state("zoomed")  # pantalla completa en Windows / la mayoría
+root.state("zoomed")  # Full screen on Windows / most systems
 
 # -----------------------------
-# CONTENEDOR PRINCIPAL CON SCROLL
+# MAIN SCROLLABLE CONTAINER
 # -----------------------------
 main_canvas = tk.Canvas(root, highlightthickness=0, bd=0)
 main_scrollbar = tk.Scrollbar(root, orient="vertical", command=main_canvas.yview)
@@ -621,35 +621,35 @@ def on_mousewheel(event):
 
 main_canvas.bind_all("<MouseWheel>", on_mousewheel)
 
-# Namespace activo oculto / lógico
+# Hidden / logical active namespace
 namespace_var = tk.StringVar(value="")
 
 # ---------------------------------
-# Selector de Namespace (nuevo)
+# Namespace Selector
 # ---------------------------------
-namespace_selector_frame = tk.LabelFrame(main_container, text="Selector de Namespace")
+namespace_selector_frame = tk.LabelFrame(main_container, text="Namespace Selector")
 namespace_selector_frame.pack(fill="x", padx=10, pady=5)
 
 namespace_search_row = tk.Frame(namespace_selector_frame)
 namespace_search_row.pack(fill="x", padx=5, pady=5)
 
-tk.Label(namespace_search_row, text="Buscar namespace:").pack(side=tk.LEFT, padx=5)
+tk.Label(namespace_search_row, text="Search namespace:").pack(side=tk.LEFT, padx=5)
 
 entry_namespace_search = tk.Entry(namespace_search_row, width=60)
 entry_namespace_search.pack(side=tk.LEFT, padx=5)
 
-tk.Button(namespace_search_row, text="Listar Namespaces", command=list_namespaces).pack(side=tk.LEFT, padx=5)
-tk.Button(namespace_search_row, text="Continuar", command=continue_with_namespace).pack(side=tk.LEFT, padx=5)
+tk.Button(namespace_search_row, text="List Namespaces", command=list_namespaces).pack(side=tk.LEFT, padx=5)
+tk.Button(namespace_search_row, text="Continue", command=continue_with_namespace).pack(side=tk.LEFT, padx=5)
 
 namespace_current_label = tk.Label(namespace_search_row, textvariable=namespace_var, relief="sunken", width=50, anchor="w")
 namespace_current_label.pack(side=tk.RIGHT, padx=5)
 
-tk.Label(namespace_search_row, text="Namespace activo:").pack(side=tk.RIGHT, padx=5)
+tk.Label(namespace_search_row, text="Active namespace:").pack(side=tk.RIGHT, padx=5)
 
 namespace_list_frame = tk.Frame(namespace_selector_frame)
 namespace_list_frame.pack(fill="x", padx=5, pady=5)
 
-tk.Label(namespace_list_frame, text="Coincidencias:").pack(anchor="w")
+tk.Label(namespace_list_frame, text="Matches:").pack(anchor="w")
 
 namespace_listbox = tk.Listbox(namespace_list_frame, height=4)
 namespace_listbox.pack(fill="x", pady=5)
@@ -667,7 +667,7 @@ tabs.pack(fill="both", padx=10, pady=10)
 yaml_top_frame = tk.Frame(tab_yaml)
 yaml_top_frame.pack(fill="x", padx=5, pady=5)
 
-tk.Label(yaml_top_frame, text="Tipo:").pack(side=tk.LEFT, padx=5)
+tk.Label(yaml_top_frame, text="Type:").pack(side=tk.LEFT, padx=5)
 
 yaml_kind_var = tk.StringVar(value="configmap")
 yaml_kind_combo = ttk.Combobox(
@@ -689,19 +689,19 @@ yaml_kind_combo = ttk.Combobox(
 )
 yaml_kind_combo.pack(side=tk.LEFT, padx=5)
 
-tk.Label(yaml_top_frame, text="Buscar:").pack(side=tk.LEFT, padx=5)
+tk.Label(yaml_top_frame, text="Search:").pack(side=tk.LEFT, padx=5)
 
 entry_yaml_search = tk.Entry(yaml_top_frame, width=60)
 entry_yaml_search.pack(side=tk.LEFT, padx=5)
 
-tk.Button(yaml_top_frame, text="Listar", command=list_yaml_resources).pack(side=tk.LEFT, padx=5)
-tk.Button(yaml_top_frame, text="Abrir seleccionado", command=load_selected_yaml_resource).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_top_frame, text="List", command=list_yaml_resources).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_top_frame, text="Open Selected", command=load_selected_yaml_resource).pack(side=tk.LEFT, padx=5)
 
 # Listbox
 yaml_middle_frame = tk.Frame(tab_yaml)
 yaml_middle_frame.pack(fill="x", padx=5, pady=5)
 
-tk.Label(yaml_middle_frame, text="Coincidencias:").pack(anchor="w")
+tk.Label(yaml_middle_frame, text="Matches:").pack(anchor="w")
 
 yaml_resource_listbox = tk.Listbox(yaml_middle_frame, height=4)
 yaml_resource_listbox.pack(fill="both", expand=True, pady=5)
@@ -711,20 +711,20 @@ yaml_resource_listbox.bind("<Double-Button-1>", lambda event: load_selected_yaml
 yaml_actions_frame = tk.Frame(tab_yaml)
 yaml_actions_frame.pack(fill="x", padx=5, pady=5)
 
-tk.Button(yaml_actions_frame, text="Nuevo YAML", command=new_yaml_tab).pack(side=tk.LEFT, padx=5)
-tk.Button(yaml_actions_frame, text="Abrir archivo", command=open_yaml_file).pack(side=tk.LEFT, padx=5)
-tk.Button(yaml_actions_frame, text="Guardar", command=save_current_yaml_tab).pack(side=tk.LEFT, padx=5)
-tk.Button(yaml_actions_frame, text="Guardar como", command=save_current_yaml_tab_as).pack(side=tk.LEFT, padx=5)
-tk.Button(yaml_actions_frame, text="Aplicar al cluster", command=apply_current_yaml_to_cluster).pack(side=tk.LEFT, padx=5)
-tk.Button(yaml_actions_frame, text="Recargar desde cluster", command=reload_current_yaml_from_cluster).pack(side=tk.LEFT, padx=5)
-tk.Button(yaml_actions_frame, text="Cerrar tab", command=close_current_yaml_tab).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_actions_frame, text="New YAML", command=new_yaml_tab).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_actions_frame, text="Open File", command=open_yaml_file).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_actions_frame, text="Save", command=save_current_yaml_tab).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_actions_frame, text="Save As", command=save_current_yaml_tab_as).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_actions_frame, text="Apply to Cluster", command=apply_current_yaml_to_cluster).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_actions_frame, text="Reload from Cluster", command=reload_current_yaml_from_cluster).pack(side=tk.LEFT, padx=5)
+tk.Button(yaml_actions_frame, text="Close Tab", command=close_current_yaml_tab).pack(side=tk.LEFT, padx=5)
 
 # Editor notebook
 yaml_editor_notebook = ttk.Notebook(tab_yaml)
 yaml_editor_notebook.pack(fill="both", padx=5, pady=5)
 
 # Output
-output_frame = tk.LabelFrame(main_container, text="Salida / Mensajes")
+output_frame = tk.LabelFrame(main_container, text="Output / Messages")
 output_frame.pack(fill="x", padx=10, pady=10)
 namespace_selector_frame.pack(fill="x", padx=10, pady=10)
 output_box = scrolledtext.ScrolledText(output_frame, height=5, wrap="none")
