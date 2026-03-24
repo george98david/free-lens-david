@@ -22,26 +22,22 @@ def run_kubectl(cmd: str) -> None:
             check=False
         )
 
-        output_box.delete("1.0", tk.END)
+        clear_main()
+        clear_bottom()
 
         if result.stdout:
-            output_box.insert(tk.END, result.stdout)
+            write_main(result.stdout)
 
         if result.stderr:
-            output_box.insert(tk.END, "\n[stderr]\n" + result.stderr)
+            append_bottom("\n[stderr]\n" + result.stderr)
 
         if not result.stdout and not result.stderr:
-            output_box.insert(tk.END, "Sin salida.\n")
+            write_bottom("Sin salida.\n")
 
     except FileNotFoundError:
-        output_box.delete("1.0", tk.END)
-        output_box.insert(
-            tk.END,
-            "Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n"
-        )
+        write_bottom("Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n")
     except Exception as e:
-        output_box.delete("1.0", tk.END)
-        output_box.insert(tk.END, f"Error inesperado: {e}\n")
+        write_bottom(f"Error inesperado: {e}\n")
 
 
 # -----------------------------
@@ -63,36 +59,35 @@ def list_pods() -> None:
             check=False
         )
 
-        output_box.delete("1.0", tk.END)
+        clear_top()
+        clear_bottom()
 
         if result.returncode != 0:
-            output_box.insert(tk.END, result.stderr)
+            write_bottom(result.stderr if result.stderr else "Error listando pods.\n")
             return
 
         lines = result.stdout.splitlines()
 
         if not lines:
-            output_box.insert(tk.END, "No hay pods.\n")
+            write_bottom("No hay pods.\n")
             return
 
-        # encabezado
-        output_box.insert(tk.END, lines[0] + "\n")
-
-        # filtrar si hay texto
         if search_text:
             filtered = [line for line in lines[1:] if search_text in line.lower()]
         else:
             filtered = lines[1:]
 
         if not filtered:
-            output_box.insert(tk.END, f"\nNo hay pods que coincidan con '{search_text}'\n")
+            write_bottom(f"No hay pods que coincidan con '{search_text}'\n")
             return
 
-        for line in filtered:
-            output_box.insert(tk.END, line + "\n")
+        final_text = lines[0] + "\n" + "\n".join(filtered)
+        write_top(final_text)
+
+        write_bottom(f"Se listaron {len(filtered)} pod(s).\n")
 
     except Exception as e:
-        output_box.insert(tk.END, f"\nError: {e}\n")
+        write_bottom(f"Error: {e}\n")
 
 
 def list_deployments() -> None:
@@ -103,62 +98,92 @@ def pod_logs() -> None:
     search_text = entry_pod.get().strip()
 
     if not search_text or search_text == "nombre-del-pod":
-        output_box.insert(tk.END, "\nDebes ingresar parte del nombre del pod.\n")
+        write_bottom("Debes ingresar parte del nombre del pod.\n")
         return
 
     try:
         matches = find_matching_pods(search_text)
 
         if not matches:
-            output_box.delete("1.0", tk.END)
-            output_box.insert(tk.END, f"No se encontraron pods que coincidan con: {search_text}\n")
+            write_bottom(f"No se encontraron pods que coincidan con: {search_text}\n")
             return
 
         if len(matches) > 1:
-            output_box.delete("1.0", tk.END)
-            output_box.insert(tk.END, f"Se encontraron varios pods para '{search_text}':\n\n")
-            for pod in matches:
-                output_box.insert(tk.END, f"- {pod}\n")
-            output_box.insert(tk.END, "\nEscribe algo más específico.\n")
+            write_top("Se encontraron varios pods para '{}':\n\n{}".format(
+                search_text,
+                "\n".join(f"- {pod}" for pod in matches)
+            ))
+            write_bottom("Hay varias coincidencias. Escribe algo más específico.\n")
             return
 
         pod = matches[0]
-        run_kubectl(f"logs {pod}")
+        namespace = namespace_var.get().strip()
+
+        cmd = ["kubectl", "logs", pod]
+        if namespace:
+            cmd += ["-n", namespace]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if result.returncode != 0:
+            write_bottom(result.stderr if result.stderr else f"No se pudieron obtener logs de {pod}\n")
+            return
+
+        write_main(result.stdout if result.stdout else "Sin logs.\n")
+        write_bottom(f"Logs cargados para pod: {pod}\n")
 
     except Exception as e:
-        output_box.delete("1.0", tk.END)
-        output_box.insert(tk.END, f"Error: {e}\n")
-
+        write_bottom(f"Error: {e}\n")
 
 def pod_describe() -> None:
     search_text = entry_pod.get().strip()
 
     if not search_text or search_text == "nombre-del-pod":
-        output_box.insert(tk.END, "\nDebes ingresar parte del nombre del pod.\n")
+        write_bottom("Debes ingresar parte del nombre del pod.\n")
         return
 
     try:
         matches = find_matching_pods(search_text)
 
         if not matches:
-            output_box.delete("1.0", tk.END)
-            output_box.insert(tk.END, f"No se encontraron pods que coincidan con: {search_text}\n")
+            write_bottom(f"No se encontraron pods que coincidan con: {search_text}\n")
             return
 
         if len(matches) > 1:
-            output_box.delete("1.0", tk.END)
-            output_box.insert(tk.END, f"Se encontraron varios pods para '{search_text}':\n\n")
-            for pod in matches:
-                output_box.insert(tk.END, f"- {pod}\n")
-            output_box.insert(tk.END, "\nEscribe algo más específico.\n")
+            write_top("Se encontraron varios pods para '{}':\n\n{}".format(
+                search_text,
+                "\n".join(f"- {pod}" for pod in matches)
+            ))
+            write_bottom("Hay varias coincidencias. Escribe algo más específico.\n")
             return
 
         pod = matches[0]
-        run_kubectl(f"describe pod {pod}")
+        namespace = namespace_var.get().strip()
+
+        cmd = ["kubectl", "describe", "pod", pod]
+        if namespace:
+            cmd += ["-n", namespace]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if result.returncode != 0:
+            write_bottom(result.stderr if result.stderr else f"No se pudo describir el pod {pod}\n")
+            return
+
+        write_bottom(result.stdout if result.stdout else "Sin describe.\n")
 
     except Exception as e:
-        output_box.delete("1.0", tk.END)
-        output_box.insert(tk.END, f"Error: {e}\n")
+        write_bottom(f"Error: {e}\n")
 
 
 def pod_logs_follow() -> None:
@@ -183,6 +208,7 @@ def pod_logs_follow() -> None:
         )
 
         current_process["proc"] = process
+        write_bottom(f"Siguiendo logs de {pod}...\n")
         output_box.insert(tk.END, f"Siguiendo logs de {pod}...\n\n")
 
         def stream_output():
@@ -192,26 +218,26 @@ def pod_logs_follow() -> None:
 
             line = proc.stdout.readline()
             if line:
-                output_box.insert(tk.END, line)
-                output_box.see(tk.END)
+                main_box.insert(tk.END, line)
+                main_box.see(tk.END)
                 root.after(50, stream_output)
             else:
                 if proc.poll() is None:
                     root.after(100, stream_output)
                 else:
-                    output_box.insert(tk.END, "\n\nProceso finalizado.\n")
+                    append_bottom("Proceso finalizado.\n")
                     current_process["proc"] = None
 
         stream_output()
 
     except FileNotFoundError:
-        output_box.delete("1.0", tk.END)
+        clear_main()
         output_box.insert(
             tk.END,
             "Error: no se encontró 'kubectl'. Verifica que esté instalado y en el PATH.\n"
         )
     except Exception as e:
-        output_box.delete("1.0", tk.END)
+        clear_main()
         output_box.insert(tk.END, f"Error inesperado: {e}\n")
 
 
@@ -220,9 +246,9 @@ def stop_follow() -> None:
     if proc is not None and proc.poll() is None:
         proc.terminate()
         current_process["proc"] = None
-        output_box.insert(tk.END, "\n\nSeguimiento detenido.\n")
+        append_bottom("Seguimiento detenido.\n")
     else:
-        output_box.insert(tk.END, "\nNo hay ningún proceso en seguimiento.\n")
+        append_bottom("No hay ningún proceso en seguimiento.\n")
 
 
 def run_custom() -> None:
@@ -234,7 +260,7 @@ def run_custom() -> None:
 
 
 def clear_output() -> None:
-    output_box.delete("1.0", tk.END)
+    clear_all_outputs()
 
 
 def list_namespaces() -> None:
@@ -786,6 +812,35 @@ def reload_current_yaml_from_cluster() -> None:
         output_box.delete("1.0", tk.END)
         output_box.insert(tk.END, f"Error recargando YAML: {e}\n")
 
+def clear_top():
+    top_box.delete("1.0", tk.END)
+
+def clear_main():
+    main_box.delete("1.0", tk.END)
+
+def clear_bottom():
+    bottom_box.delete("1.0", tk.END)
+
+def clear_all_outputs():
+    clear_top()
+    clear_main()
+    clear_bottom()
+
+def write_top(text: str):
+    top_box.delete("1.0", tk.END)
+    top_box.insert(tk.END, text)
+
+def write_main(text: str):
+    main_box.delete("1.0", tk.END)
+    main_box.insert(tk.END, text)
+
+def write_bottom(text: str):
+    bottom_box.delete("1.0", tk.END)
+    bottom_box.insert(tk.END, text)
+
+def append_bottom(text: str):
+    bottom_box.insert(tk.END, text)
+
 # -----------------------------
 # UI Setup
 # -----------------------------
@@ -913,11 +968,29 @@ yaml_editor_notebook = ttk.Notebook(tab_yaml)
 yaml_editor_notebook.pack(fill="both", expand=True, padx=5, pady=5)
 
 # -----------------------------
-# OUTPUT WINDOW
+# OUTPUT AREAS
 # -----------------------------
-output_box = scrolledtext.ScrolledText(root, width=120, height=28)
-output_box.pack(padx=10, pady=10, fill="both", expand=True)
+output_container = tk.Frame(root)
+output_container.pack(padx=10, pady=10, fill="both", expand=True)
 
-root.protocol("WM_DELETE_WINDOW", on_close)
-root.mainloop()
+# Arriba: listas
+top_frame = tk.LabelFrame(output_container, text="Listas / Resultados")
+top_frame.pack(fill="both", expand=True, pady=4)
+
+top_box = scrolledtext.ScrolledText(top_frame, width=120, height=10, wrap="none")
+top_box.pack(fill="both", expand=True, padx=5, pady=5)
+
+# Medio: logs / yaml / contenido principal
+main_frame = tk.LabelFrame(output_container, text="Logs / Contenido principal")
+main_frame.pack(fill="both", expand=True, pady=4)
+
+main_box = scrolledtext.ScrolledText(main_frame, width=120, height=14, wrap="none")
+main_box.pack(fill="both", expand=True, padx=5, pady=5)
+
+# Abajo: describe / mensajes
+bottom_frame = tk.LabelFrame(output_container, text="Describe / Mensajes")
+bottom_frame.pack(fill="both", expand=True, pady=4)
+
+bottom_box = scrolledtext.ScrolledText(bottom_frame, width=120, height=8, wrap="none")
+bottom_box.pack(fill="both", expand=True, padx=5, pady=5)
 
